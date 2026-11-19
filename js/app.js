@@ -822,7 +822,7 @@
           '<button type="button" class="meme-open" data-open-meme="' + esc(m.id) + '"><span>Open the post</span></button></div>';
     var pic = m.authorPic ? '<img class="meme-pfp" src="' + esc(m.authorPic) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' : '';
     return '<article class="meme card-cut' + (big ? ' meme-big' : '') + (m.media ? '' : ' meme-noimg') + '" data-meme="' + esc(m.id) + '">' + media +
-      '<div class="meme-meta"><a class="meme-author" href="' + esc(memeUrl(m)) + '" target="_blank" rel="noopener" title="See the post on X">' + pic +
+      '<div class="meme-meta"><a class="meme-author" href="https://x.com/' + encodeURIComponent(m.author) + '" target="_blank" rel="noopener" title="@' + esc(m.author) + ' on X">' + pic +
         '<b>' + esc(m.authorName || m.author) + '</b><span class="muted">@' + esc(m.author) + '</span></a>' +
         (m.text && m.media ? '<p class="meme-caption">' + esc(m.text) + '</p>' : '') + '</div>' +
       '<div class="meme-foot">' + likeBtnHtml(m) + memeCreatorHtml(m) + '<span class="meme-time muted">' + esc(memeAgo(m.time)) + '</span></div>' +
