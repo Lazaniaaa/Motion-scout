@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Motion Scout</title>
+  <meta name="description" content="Community tool for the Motion Mogathon: the official leaderboard, creator stats from X and YouTube, and a deck builder for any star cap.">
+  <meta name="theme-color" content="#010E1F">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23010E1F'/%3E%3Cpath d='M4 26 14 6h6L10 26z' fill='%23FF3977'/%3E%3Cpath d='M15 26 25 6h4L19 26z' fill='%237AFDFD'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=20261119fb">
+</head>
+<body>
+  <nav class="topnav" aria-label="Sections">
+    <div class="wrap topnav-inner">
+      <a class="topnav-brand" href="#play" aria-label="Motion Scout, How to play"><span>Motion</span><span class="logo-accent">Scout</span></a>
+      <div class="topnav-links">
+        <a href="#play" data-tab="play">How to play</a>
+        <a href="#build" data-tab="build" class="topnav-cta">Build a deck</a>
+        <a href="#leaderboard" data-tab="leaderboard">Leaderboard</a>
+        <a href="#about" data-tab="about">About</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero" id="top" data-views="play">
+    <div class="hero-stripes" aria-hidden="true"></div>
+    <div class="wrap hero-inner">
+      <p class="kicker">Community tool · Motion Mogathon · Not affiliated with Motion</p>
+      <h1 class="logo"><span>Motion</span><span class="logo-accent">Scout</span></h1>
+      <p class="tagline">Motion’s official creator ranks, social stats where available, and a <strong>deck builder</strong> for any star cap.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="view" data-views="play">
+    <section id="howto" class="block" aria-labelledby="howto-title">
+      <div class="block-head">
+        <h2 class="h-tag h-tag-cyan" id="howto-title">How to play</h2>
+        <p class="muted">Seven steps from your first pack to Friday’s results. Rules from <a href="https://docs.motion.game" target="_blank" rel="noopener">docs.motion.game</a>.</p>
+      </div>
+      <div class="deck-wrap">
+        <div class="deck" id="deck" tabindex="0" role="group" aria-roledescription="card deck" aria-label="How to play, 7 cards. Press Enter or tap the card for the next one.">
+          <article class="deck-card" aria-label="Step 1 of 7: Get cards">
+            <div class="dc-head"><span class="ht-step">01<small>/07</small></span><span class="dc-lead">Packs, Marketplace, trade-ins</span></div>
+            <div class="dc-body">
+              <svg class="ht-art" viewBox="0 0 160 100" aria-hidden="true">
+                  <rect class="a-card" x="46" y="18" width="44" height="64" rx="4" transform="rotate(-16 68 90)"/>
+                  <rect class="a-card a-cyan" x="58" y="14" width="44" height="64" rx="4"/>
+                  <rect class="a-card a-pink" x="70" y="18" width="44" height="64" rx="4" transform="rotate(16 92 90)"/>
+                  <text class="a-txt" x="122" y="96">×7</text>
+                </svg>
+              <div class="dc-text"><h3 class="ht-title">Get cards</h3>
+              <ul>
+              <li><b>Starter Pack</b>: $100 for 7 random cards, each a different creator.</li>
+              <li>Rarity odds per card: Common 75%, Rare 20%, Epic 4.5%, Legendary 0.5%.</li>
+              <li>High-star creators show up less often in packs.</li>
+              <li><b>Marketplace</b>: buy a specific card or place a bid. Sellers pay a 3% fee.</li>
+              <li><b>Trade in</b> 12 cards you don’t need for a new Starter Pack. Traded cards are burned for good.</li>
+              </ul>
+              </div>
+            </div>
+          </article>
+          <article class="deck-card" aria-label="Step 2 of 7: Read a card">
+            <div class="dc-head"><span class="ht-step">02<small>/07</small></span><span class="dc-lead">Stars, rarity, the creator</span></div>
+            <div class="dc-body">
+              <svg class="ht-art" viewBox="0 0 160 100" aria-hidden="true">
+                  <rect class="a-card a-pink" x="52" y="6" width="56" height="88" rx="5"/>
+                  <rect class="a-chip" x="58" y="12" width="20" height="13" rx="2"/><text class="a-mini" x="68" y="22" text-anchor="middle">7★</text>
+                  <circle class="a-line" cx="80" cy="46" r="13"/>
+                  <rect class="a-bar" x="62" y="66" width="36" height="5" rx="2"/>
+                  <rect class="a-chip a-epic" x="66" y="76" width="28" height="11" rx="2"/>
+                </svg>
+              <div class="dc-text"><h3 class="ht-title">Read a card</h3>
+              <ul>
+              <li><b>Stars (1–8)</b>: the creator’s form over the last 14 days compared with everyone else. They count toward the star cap and set pack odds, not points.</li>
+              <li><b>Rarity</b>: how scarce the card is. It sets the Score Boost.</li>
+              <li><b>Top 20 / Rank / Socials</b>: top-20 finishes in official tournaments, rank on the Motion Leaderboard (Pack Shop), and how many of the 4 supported platforms they’re active on.</li>
+              <li><b>Back of the card</b>: 3-day moving averages of views and engagement on X, Instagram, YouTube and TikTok where available, plus card supply by rarity.</li>
+              </ul>
+              </div>
+            </div>
+          </article>
+          <article class="deck-card" aria-label="Step 3 of 7: Rarity and boost">
+            <div class="dc-head"><span class="ht-step">03<small>/07</small></span><span class="dc-lead">Rarer card, bigger multiplier</span></div>
+            <div class="dc-body">
+              <svg class="ht-art" viewBox="0 0 160 100" aria-hidden="true">
+                  <rect class="a-card" x="18" y="58" width="24" height="32" rx="3"/>
+                  <rect class="a-card a-rare" x="52" y="44" width="24" height="46" rx="3"/>
+                  <rect class="a-card a-epic" x="86" y="30" width="24" height="60" rx="3"/>
+                  <rect class="a-card a-leg" x="120" y="14" width="24" height="76" rx="3"/>
+                  <text class="a-mini" x="30" y="52" text-anchor="middle">1×</text><text class="a-mini" x="64" y="38" text-anchor="middle">1.5×</text>
+                  <text class="a-mini" x="98" y="24" text-anchor="middle">2×</text><text class="a-mini" x="132" y="9" text-anchor="middle">2.5×</text>
+                </svg>
+              <div class="dc-text"><h3 class="ht-title">Rarity and boost</h3>
+              <ul>
+              <li><b>Common 1×</b> · <b>Rare 1.5×</b> · <b>Epic 2×</b> · <b>Legendary 2.5×</b>.</li>
+              <li>The boost multiplies the creator’s Motion Score in your lineup.</li>
+              <li>Cards of the same creator share stars and Motion Score. Rarity sets the boost (cards can also come from different editions).</li>
+              <li>Rarity can beat fame: 500 pts on a Legendary card add 1,250, more than 1,000 pts on a Common.</li>
+              <li>Each tournament sets boost limits: your combination of rarities must fit them.</li>
+              </ul>
+              </div>
+            </div>
+          </article>
+          <article class="deck-card" aria-label="Step 4 of 7: Build a lineup">
+            <div class="dc-head"><span class="ht-step">04<small>/07</small></span><span class="dc-lead">5 creators under the star cap</span></div>
+            <div class="dc-body">
+              <svg class="ht-art" viewBox="0 0 160 100" aria-hidden="true">
+                  <rect class="a-card a-pink" x="8" y="22" width="26" height="40" rx="3"/><rect class="a-card a-cyan" x="38" y="22" width="26" height="40" rx="3"/>
+                  <rect class="a-card a-pink" x="68" y="22" width="26" height="40" rx="3"/><rect class="a-card a-cyan" x="98" y="22" width="26" height="40" rx="3"/>
+                  <rect class="a-card a-pink" x="128" y="22" width="26" height="40" rx="3"/>
+                  <text class="a-mini" x="21" y="46" text-anchor="middle">8★</text><text class="a-mini" x="51" y="46" text-anchor="middle">7★</text>
+                  <text class="a-mini" x="81" y="46" text-anchor="middle">6★</text><text class="a-mini" x="111" y="46" text-anchor="middle">6★</text>
+                  <text class="a-mini" x="141" y="46" text-anchor="middle">5★</text>
+                  <text class="a-txt" x="80" y="90" text-anchor="middle">= 32★</text>
+                </svg>
+              <div class="dc-text"><h3 class="ht-title">Build a lineup</h3>
+              <ul>
+              <li>Exactly <b>5 different creators</b>. You can’t use the same creator twice, even if you own several of their cards.</li>
+              <li><b>Star cap</b>: total stars must fit, e.g. 8+7+6+6+5 = 32 fits a 32★ cap.</li>
+              <li>Your lineup’s combination of card rarities must meet the tournament’s boost limits.</li>
+              <li>Submit your five in Motion’s <b>Homebase</b>: a draft isn’t an entry. You can edit and resubmit until Monday 7 AM ET.</li>
+              <li><b>One entry</b> per tournament: resubmitting updates it.</li>
+              </ul>
+              </div>
+            </div>
+          </article>
+          <article class="deck-card" aria-label="Step 5 of 7: Tournament week">
+            <div class="dc-head"><span class="ht-step">05<small>/07</small></span><span class="dc-lead">Lock Monday, results Friday</span></div>
+            <div class="dc-body">
+              <svg class="ht-art" viewBox="0 0 160 100" aria-hidden="true">
+                  <rect class="a-day a-cyan" x="6" y="30" width="18" height="44" rx="2"/><rect class="a-day a-cyan" x="28" y="30" width="18" height="44" rx="2"/>
+                  <rect class="a-day a-pink" x="50" y="30" width="18" height="44" rx="2"/><rect class="a-day a-pink" x="72" y="30" width="18" height="44" rx="2"/>
+                  <rect class="a-day a-pink" x="94" y="30" width="18" height="44" rx="2"/><rect class="a-day a-pink" x="116" y="30" width="18" height="44" rx="2"/>
+                  <rect class="a-day a-pink" x="138" y="30" width="18" height="44" rx="2"/>
+                  <text class="a-mini" x="26" y="88" text-anchor="middle">Sat–Sun</text><text class="a-mini" x="103" y="88" text-anchor="middle">Mon–Fri</text>
+                  <rect class="a-lock" x="53" y="12" width="12" height="9" rx="1"/><path class="a-line" d="M55 12v-3a4 4 0 0 1 8 0v3"/>
+                  <path class="a-cup" d="M140 8h14v6a7 7 0 0 1-14 0z M147 21v4 M143 26h8"/>
+                </svg>
+              <div class="dc-text"><h3 class="ht-title">Tournament week</h3>
+              <ul>
+              <li><b>Sat–Sun</b>: build and submit your lineup.</li>
+              <li><b>Mon 7 AM ET</b>: lineups lock. <b>9 AM ET</b>: the tournament starts.</li>
+              <li><b>Mon–Fri</b>: scores update every 4 hours on the Tournament Leaderboard in Arena.</li>
+              <li><b>Fri 5 PM ET</b>: results are finalized and your cards unlock for the next week.</li>
+              <li>Check each tournament’s <b>Prize Table</b> in Arena. Prizes for eligible winners usually arrive about 30 minutes after 5 PM ET, after wallet screening.</li>
+              </ul>
+              </div>
+            </div>
+          </article>
+          <article class="deck-card" aria-label="Step 6 of 7: How points work">
+            <div class="dc-head"><span class="ht-step">06<small>/07</small></span><span class="dc-lead">Top creator = 1,000 pts</span></div>
+            <div class="dc-body">
+              <svg class="ht-art" viewBox="0 0 160 100" aria-hidden="true">
+                  <rect class="a-bar-v a-pink" x="18" y="16" width="22" height="70" rx="2"/>
+                  <rect class="a-bar-v a-cyan" x="48" y="34" width="22" height="52" rx="2"/>
+                  <rect class="a-bar-v a-cyan" x="78" y="46" width="22" height="40" rx="2"/>
+                  <rect class="a-bar-v a-cyan" x="108" y="58" width="22" height="28" rx="2"/>
+                  <text class="a-mini" x="29" y="11" text-anchor="middle">1000</text>
+                  <line class="a-base" x1="10" y1="88" x2="150" y2="88"/>
+                </svg>
+              <div class="dc-text"><h3 class="ht-title">How points work</h3>
+              <ul>
+              <li><b>Motion Score</b>: performance on X, Instagram, TikTok and YouTube compared with every other creator. Fresh start every week: only posts published during the tournament count.</li>
+              <li>Big accounts can’t win on size alone. X carries the most weight.</li>
+              <li>On X only original posts, thread starters and quotes count. Replies, thread follow-ups, reposts and posts deleted within 3 hours don’t.</li>
+              <li>The top creator gets <b>1,000</b>. <b>Lineup Score</b> = sum of each creator’s score × card boost.</li>
+              </ul>
+              </div>
+            </div>
+          </article>
+          <article class="deck-card" aria-label="Step 7 of 7: Scout smarter">
+            <div class="dc-head"><span class="ht-step">07<small>/07</small></span><span class="dc-lead">Where Motion Scout helps</span></div>
+            <div class="dc-body">
+              <svg class="ht-art" viewBox="0 0 160 100" aria-hidden="true">
+                  <rect class="a-card a-cyan" x="40" y="10" width="50" height="78" rx="5"/>
+                  <text class="a-mini" x="65" y="30" text-anchor="middle">3★</text>
+                  <text class="a-txt a-hot" x="65" y="62" text-anchor="middle">▲3</text>
+                  <circle class="a-lens" cx="106" cy="52" r="20"/>
+                  <line class="a-lens" x1="120" y1="66" x2="140" y2="86"/>
+                </svg>
+              <div class="dc-text"><h3 class="ht-title">Scout smarter</h3>
+              <ul>
+                <li><b>Leaderboard and Movers</b>: Motion’s official creator ranks, a trend line for each, and who climbed or fell since Monday’s lock.</li>
+                <li><b>Build a deck</b>: the best 5 for any star cap from 8 to 40. <b>My lineup this week</b> tracks the five you submitted.</li>
+                <li><b>My cards</b>: add the rarity and stars of the cards you own, and it plans with your real boosts and stars.</li>
+                <li>Other stars are ≈ estimated from rank. It’s a planning tool, not the game’s score.</li>
+              </ul>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="deck-ctl">
+          <button type="button" class="btn btn-ghost" data-deck="-1"><span>‹ Back</span></button>
+          <span class="deck-pos" id="deck-pos" aria-live="polite">1 / 7</span>
+          <button type="button" class="btn btn-pink" data-deck="1"><span>Next ›</span></button>
+        </div>
+        <p class="deck-hint muted">Tap the card to send it to the back of the deck.</p>
+      </div>
+    </section>
+
+
+    </div>
+
+    <div class="view" data-views="build leaderboard">
+    <p id="data-status" class="data-status" aria-live="polite"></p>
+    <div id="errors" role="alert"></div>
+    </div>
+
+    <div class="view" data-views="build">
+    <section id="lineup-section" class="block">
+      <div class="block-head">
+        <h2 class="h-tag h-tag-cyan" id="lineup-title">Build a deck</h2>
+        <p class="muted" id="lineup-sub"></p>
+      </div>
+      <div id="lineup"><div class="empty">Loading the official leaderboard…</div></div>
+      <div id="mylineup"></div>
+    </section>
+
+    </div>
+
+    <div class="view" data-views="leaderboard">
+    <section id="ranking-section" class="block">
+      <div class="block-head">
+        <h2 class="h-tag">Leaderboard</h2>
+        <p class="muted" id="ranking-sub">Motion’s official creator ranks, with each creator’s last 14 days on X where available. Click a creator for details.</p>
+      </div>
+      <div id="movers"></div>
+      <div class="mobile-sort" id="mobile-sort" role="toolbar" aria-label="Sort leaderboard"></div>
+      <div class="rank-head" id="rank-head" role="toolbar" aria-label="Sort leaderboard"></div>
+      <div id="ranking" class="rank-list"><div class="empty">Loading the official leaderboard…</div></div>
+    </section>
+
+    </div>
+
+    <div class="view" data-views="about">
+    <section id="roadmap" class="block" aria-labelledby="roadmap-title">
+      <div class="block-head">
+        <h2 class="h-tag" id="roadmap-title">What’s next</h2>
+        <p class="muted">Built for launch: once tournaments go live, real stars, scores and weekly history plug straight in. Built in public for the Motion Mogathon.</p>
+      </div>
+      <div class="rm-grid">
+        <article class="rm-card card-cut">
+          <div class="rm-top"><span class="rm-no">01</span><span class="chip rm-st rm-next">Next</span></div>
+          <h3>Real stars for every creator</h3>
+          <p>Today you can add the stars your own cards show in <b>My cards</b>. Next: current stars for every creator, so no one is ≈.</p>
+        </article>
+        <article class="rm-card card-cut">
+          <div class="rm-top"><span class="rm-no">02</span><span class="chip rm-st rm-next">Next</span></div>
+          <h3>Tournament archive</h3>
+          <p>Every tournament recorded: each creator’s score and final place, week by week, so you can see who delivers when it counts.</p>
+        </article>
+        <article class="rm-card card-cut">
+          <div class="rm-top"><span class="rm-no">03</span><span class="chip rm-st rm-now">In progress</span></div>
+          <h3>YouTube stats</h3>
+          <p>Subscribers, uploads, views and engagement for the creators who have a channel, next to their X numbers.</p>
+        </article>
+        <article class="rm-card card-cut">
+          <div class="rm-top"><span class="rm-no">04</span><span class="chip rm-st">Planned</span></div>
+          <h3>Your cards, automatically</h3>
+          <p>Enter your X handle or in-game name and get decks built from the cards you actually own, if Motion opens player data.</p>
+        </article>
+        <article class="rm-card card-cut">
+          <div class="rm-top"><span class="rm-no">05</span><span class="chip rm-st">Planned</span></div>
+          <h3>Live tournament standing</h3>
+          <p>Your submitted lineup’s score and place during the week, if Motion publishes creator scores.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="how" class="block">
+      <div class="block-head">
+        <h2 class="h-tag h-tag-cyan">How it works</h2>
+        <p class="muted">Where the numbers on this page come from.</p>
+      </div>
+      <div id="how-body" class="how-grid"></div>
+    </section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-stripe" aria-hidden="true"></div>
+    <div class="wrap footer-row">
+      <p>Community tool for the Motion Mogathon by <a href="https://x.com/NotYur" target="_blank" rel="noopener">@NotYur</a>. Not affiliated with Motion.</p>
+      <button type="button" class="btn btn-ghost" data-feedback><span>Report a problem · Suggest an idea</span></button>
+    </div>
+  </footer>
+
+  <dialog id="detail" class="modal" aria-labelledby="detail-title"></dialog>
+  <dialog id="config" class="modal" aria-labelledby="config-title"></dialog>
+  <dialog id="cards" class="modal modal-narrow" aria-labelledby="cards-title"></dialog>
+  <dialog id="lineup-dlg" class="modal modal-narrow" aria-labelledby="lineup-dlg-title"></dialog>
+  <dialog id="feedback" class="modal modal-narrow" aria-labelledby="feedback-title"></dialog>
+  <button type="button" class="fb-float" data-feedback aria-label="Report a problem or suggest an idea">Feedback</button>
+
+  <script src="js/public-config.js?v=20261119fb"></script>
+  <script src="js/lineup.js?v=20261119fb"></script>
+  <script src="js/api.js?v=20261119fb"></script>
+  <script src="js/creators-data.js?v=20261119fb"></script>
+
+  <script src="js/app.js?v=20261119fb"></script>
+</body>
+</html>
