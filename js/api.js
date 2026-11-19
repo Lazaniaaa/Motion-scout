@@ -49,6 +49,19 @@
       if (!cfg.apiUrl) return Promise.reject(new Error('no server URL'));
       return post(cfg.apiUrl, { mode: 'feedback', type: msg.type, message: msg.message, contact: msg.contact, page: msg.page, website: msg.website });
     },
+    // Memes wall: approved memes with like counts, submitting a post on X, one like per browser.
+    memes: function (cfg) {
+      if (!cfg.apiUrl) return Promise.reject(new Error('no server URL'));
+      return fetch(cfg.apiUrl + (cfg.apiUrl.indexOf('?') < 0 ? '?' : '&') + 'mode=memes', { cache: 'no-store', redirect: 'follow' }).then(parse);
+    },
+    submitMeme: function (cfg, m) {
+      if (!cfg.apiUrl) return Promise.reject(new Error('no server URL'));
+      return post(cfg.apiUrl, { mode: 'meme', url: m.url, creator: m.creator, website: m.website });
+    },
+    likeMeme: function (cfg, id, voter) {
+      if (!cfg.apiUrl) return Promise.reject(new Error('no server URL'));
+      return post(cfg.apiUrl, { mode: 'meme_like', id: id, voter: voter });
+    },
     score: function (cfg, csv, self) {
       var l = local(); if (l) return l.score(cfg, csv, self);
       if (!cfg.apiUrl) return Promise.reject(new Error('no server URL'));

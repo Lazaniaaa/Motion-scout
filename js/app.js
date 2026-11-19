@@ -655,7 +655,7 @@
 
   /* ---------- tabs: one view at a time, chosen by the URL hash ---------- */
   // #play (How to play) · #build (Build a deck) · #leaderboard · #about. Old section links still work.
-  var TABS = ['play', 'build', 'leaderboard', 'about'];
+  var TABS = ['play', 'build', 'leaderboard', 'memes', 'about'];
   var OLD_HASH = { howto: 'play', top: 'play', 'lineup-section': 'build', 'check-section': 'build', deck: 'build',
     'ranking-section': 'leaderboard', roadmap: 'about', how: 'about' };
   var LS_TAB = 'motionScout.tab.v1';
@@ -678,6 +678,7 @@
     if (!keepScroll) window.scrollTo(0, 0);
     // the deck builder's slider and lists are measured on screen: redraw when its tab opens
     if (tab === 'build' && state.board) renderLineup();
+    if (tab === 'memes') loadMemes();
   }
   window.addEventListener('hashchange', function () {
     var tab = tabFromHash() || 'play';
@@ -736,6 +737,212 @@
       else if (e.key === 'ArrowLeft') { e.preventDefault(); deckBack(); }
     });
   }
+
+  /* ---------- memes wall ---------- */
+  // Approved memes come from the server (every one is reviewed first). Each is shown with X's
+  // official embed, so the author keeps the views and a deleted post disappears here too.
+  // Likes are anonymous: one per browser per meme. Meme of the week = most liked since Monday's lock.
+  var LS_VOTER = 'motionScout.voter.v1', LS_LIKED = 'motionScout.liked.v1', LS_MSORT = 'motionScout.memeSort.v1';
+  var MEMES_PAGE = 12;
+  var memes = { list: null, error: null, loading: false, sort: lsGet(LS_MSORT) === 'top' ? 'top' : 'new', shown: MEMES_PAGE, liked: {}, motwId: null };
+  try { memes.liked = JSON.parse(lsGet(LS_LIKED) || '{}') || {}; } catch (e) { memes.liked = {}; }
+  var CREATOR_BY_X = {};
+  (MS.CREATORS || []).forEach(function (c) { if (c.x) CREATOR_BY_X[c.x.toLowerCase()] = c; });
+
+  function voterId() {
+    var v = lsGet(LS_VOTER);
+    if (v && /^[a-z0-9]{8,40}$/.test(v)) return v;
+    var a = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(a);
+    else for (var i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256);
+    v = Array.prototype.map.call(a, function (b) { return (b % 36).toString(36); }).join('');
+    lsSet(LS_VOTER, v);
+    return v;
+  }
+  var widgetsReady = null;
+  function loadWidgets() {
+    if (widgetsReady) return widgetsReady;
+    widgetsReady = new Promise(function (resolve, reject) {
+      if (window.twttr && window.twttr.widgets) { resolve(window.twttr); return; }
+      var s = document.createElement('script');
+      s.src = 'https://platform.twitter.com/widgets.js'; s.async = true; s.charset = 'utf-8';
+      s.onload = function () { if (window.twttr && window.twttr.ready) window.twttr.ready(resolve); else reject(new Error('no widgets')); };
+      s.onerror = function () { reject(new Error('blocked')); };
+      document.head.appendChild(s);
+    });
+    return widgetsReady;
+  }
+  // Swap the text fallback for X's embed; hide the card if the post is gone.
+  function embedMeme(el, m) {
+    loadWidgets().then(function (tw) {
+      return tw.widgets.createTweet(m.id, el.querySelector('.meme-embed'), { theme: 'dark', dnt: true, conversation: 'none', align: 'center' });
+    }).then(function (node) {
+      el.classList.add(node ? 'is-embedded' : 'is-gone');
+    }).catch(function () { /* embeds blocked in this browser: the text version stays */ });
+  }
+  function memeAgo(iso) {
+    var t = Date.parse(iso), s = (Date.now() - t) / 1000;
+    if (!isFinite(t)) return '';
+    if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm ago';
+    if (s < 86400) return Math.round(s / 3600) + 'h ago';
+    if (s < 7 * 86400) return Math.round(s / 86400) + 'd ago';
+    return new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+  function likeBtnHtml(m) {
+    var on = !!memes.liked[m.id];
+    return '<button type="button" class="meme-like' + (on ? ' is-liked' : '') + '" data-like="' + esc(m.id) + '" aria-pressed="' + on + '" aria-label="Like this meme">' +
+      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.6 4.5c2.1 0 3.6 1.2 4.4 2.6.8-1.4 2.3-2.6 4.4-2.6 3.6 0 5.7 3.7 4.2 7.2C19.5 16.4 12 21 12 21z"/></svg>' +
+      '<b>' + m.likes + '</b></button>';
+  }
+  function memeCreatorHtml(m) {
+    var info = m.creator && CREATOR_BY_X[m.creator];
+    if (!info) return '';
+    var c = state.board && state.board.list.filter(function (x) { return x.key === m.creator; })[0];
+    var who = c || { name: info.name, handle: info.x };
+    return '<button type="button" class="meme-creator" data-key="' + esc(m.creator) + '" title="About ' + esc(who.name) + '">' +
+      avatarHtml(who, 22) + '<span>' + esc(who.name) + '</span></button>';
+  }
+  function memeHtml(m, big) {
+    var url = 'https://x.com/' + encodeURIComponent(m.author) + '/status/' + m.id;
+    return '<article class="meme card-cut' + (big ? ' meme-big' : '') + '" data-meme="' + esc(m.id) + '">' +
+      '<div class="meme-embed"></div>' +
+      '<div class="meme-fallback"><p class="meme-by"><b>' + esc(m.authorName || m.author) + '</b> <span class="muted">@' + esc(m.author) + '</span></p>' +
+        (m.text ? '<p class="meme-text">' + esc(m.text) + '</p>' : '') +
+        '<a href="' + esc(url) + '" target="_blank" rel="noopener">See the meme on X →</a></div>' +
+      '<div class="meme-foot">' + likeBtnHtml(m) + memeCreatorHtml(m) + '<span class="meme-time muted">' + esc(memeAgo(m.time)) + '</span></div>' +
+      '</article>';
+  }
+  function memeOfWeek(list) {
+    var lock = lastLock(new Date()).getTime();
+    var best = function (from, to) {
+      var b = null;
+      list.forEach(function (m) {
+        var t = Date.parse(m.time);
+        if (!(t >= from && t < to) || !(m.likes > 0)) return;
+        if (!b || m.likes > b.likes || (m.likes === b.likes && t < Date.parse(b.time))) b = m;
+      });
+      return b;
+    };
+    var cur = best(lock, Infinity);
+    if (cur) return { m: cur, label: 'Meme of the week', sub: 'Leading this week with ' + cur.likes + (cur.likes === 1 ? ' like' : ' likes') + '. Voting resets Monday 7 AM ET.' };
+    var last = best(lock - 7 * 864e5, lock);
+    if (last) return { m: last, label: 'Last week’s winner', sub: last.likes + (last.likes === 1 ? ' like' : ' likes') + '. This week’s race is open: like your favorites below.' };
+    return null;
+  }
+  function renderMotw(force) {
+    var box = $('motw'), w = memes.list ? memeOfWeek(memes.list) : null, id = w ? w.m.id : '';
+    if (!force && memes.motwId === id && box.innerHTML) {
+      if (w) box.querySelector('.motw-sub').textContent = w.sub;
+      return;
+    }
+    memes.motwId = id;
+    if (!w) {
+      box.innerHTML = '<div class="motw-head"><span class="motw-tag">Meme of the week</span></div>' +
+        '<p class="motw-empty">' + (memes.list ? 'No likes yet this week. Like your favorites below: the most-liked meme lands here. Voting resets every Monday at 7 AM ET, when Motion lineups lock.' : 'Loading…') + '</p>';
+      return;
+    }
+    box.innerHTML = '<div class="motw-head"><span class="motw-tag">' + esc(w.label) + '</span><span class="motw-sub muted">' + esc(w.sub) + '</span></div>' + memeHtml(w.m, true);
+    embedMeme(box.querySelector('.meme'), w.m);
+  }
+  function sortedMemes() {
+    var t = function (m) { return Date.parse(m.time) || 0; };
+    return memes.list.slice().sort(memes.sort === 'top'
+      ? function (a, b) { return b.likes - a.likes || t(b) - t(a); }
+      : function (a, b) { return t(b) - t(a); });
+  }
+  function renderMemes(from) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-msort]'), function (b) {
+      var on = b.dataset.msort === memes.sort;
+      b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on));
+    });
+    var wall = $('memes-wall');
+    if (!memes.list) {
+      wall.innerHTML = memes.error
+        ? '<div class="empty">Couldn’t load memes right now. <button type="button" class="link-btn" id="memes-retry">Try again</button></div>'
+        : '<div class="empty">Loading memes…</div>';
+      $('memes-more').hidden = true;
+      renderMotw();
+      return;
+    }
+    var list = sortedMemes();
+    $('memes-count').textContent = list.length ? list.length + (list.length === 1 ? ' meme' : ' memes') : '';
+    $('memes-more').hidden = list.length <= memes.shown;
+    renderMotw();
+    if (!list.length) {
+      wall.innerHTML = '<div class="empty">No memes on the wall yet. Be the first: post yours on X and submit it above.</div>';
+      return;
+    }
+    from = from || 0;
+    var part = list.slice(from, memes.shown);
+    if (!from) wall.innerHTML = '';
+    wall.insertAdjacentHTML('beforeend', part.map(function (m) { return memeHtml(m); }).join(''));
+    var cards = wall.querySelectorAll('.meme');
+    part.forEach(function (m, i) { embedMeme(cards[from + i], m); });
+  }
+  function loadMemes(force) {
+    if (memes.loading || (memes.list && !force)) return;
+    memes.loading = true;
+    if (!memes.list) renderMemes();
+    withTimeout(API.memes(state.cfg), 20000).then(function (r) {
+      memes.list = (r.memes || []).filter(function (m) { return /^\d{5,25}$/.test(m.id) && /^\w{1,15}$/.test(m.author); });
+      memes.error = null;
+    }).catch(function (e) {
+      if (/unknown mode/.test(e.message)) memes.list = []; // server not updated yet: just an empty wall
+      else memes.error = e.message;
+    }).then(function () { memes.loading = false; memes.shown = MEMES_PAGE; renderMemes(); });
+  }
+  function setLikeButtons(m) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-like="' + m.id + '"]'), function (b) {
+      var on = !!memes.liked[m.id];
+      b.classList.toggle('is-liked', on); b.setAttribute('aria-pressed', String(on));
+      b.querySelector('b').textContent = String(m.likes);
+    });
+  }
+  function likeMeme(id) {
+    var m = memes.list && memes.list.filter(function (x) { return x.id === id; })[0];
+    if (!m || memes.liked[id]) return;
+    memes.liked[id] = 1; m.likes++;
+    lsSet(LS_LIKED, JSON.stringify(memes.liked));
+    setLikeButtons(m); renderMotw();
+    withTimeout(API.likeMeme(state.cfg, id, voterId()), 20000).then(function (r) {
+      if (r && r.likes != null) { m.likes = r.likes; setLikeButtons(m); renderMotw(); }
+    }).catch(function (e) {
+      delete memes.liked[id]; m.likes = Math.max(0, m.likes - 1);
+      lsSet(LS_LIKED, JSON.stringify(memes.liked));
+      setLikeButtons(m); renderMotw();
+      Array.prototype.forEach.call(document.querySelectorAll('[data-like="' + id + '"]'), function (b) { b.title = 'Couldn’t save your like: ' + e.message; });
+    });
+  }
+  (function initMemeForm() {
+    var sel = $('meme-creator');
+    (MS.CREATORS || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (c) {
+      if (!c.x) return;
+      var o = document.createElement('option');
+      o.value = c.x.toLowerCase(); o.textContent = c.name + ' (@' + c.x + ')';
+      sel.appendChild(o);
+    });
+    $('meme-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var url = $('meme-url').value.trim(), st = $('meme-status');
+      if (!/^(https?:\/\/)?(www\.|mobile\.)?(x|twitter)\.com\/\w{1,15}\/status(es)?\/\d{5,25}/i.test(url)) {
+        st.className = 'fb-status err-text'; st.textContent = 'Paste a link to your post on X, like https://x.com/you/status/123…';
+        $('meme-url').focus();
+        return;
+      }
+      $('meme-send').disabled = true;
+      st.className = 'fb-status'; st.textContent = 'Checking your post…';
+      withTimeout(API.submitMeme(state.cfg, { url: url, creator: sel.value, website: $('meme-website').value }), 30000).then(function (r) {
+        st.className = 'fb-status ok-text';
+        st.textContent = r.duplicate
+          ? (r.status === 'live' ? 'That meme is already on the wall.' : 'Already submitted: it’s waiting for review.')
+          : 'Thanks! Your meme is in review and shows up here once it’s approved.';
+        if (!r.duplicate) { $('meme-url').value = ''; sel.value = ''; }
+      }).catch(function (err) {
+        st.className = 'fb-status err-text';
+        st.textContent = /unknown mode/.test(err.message) ? 'Submissions open very soon. Please try again later.' : err.message;
+      }).then(function () { $('meme-send').disabled = false; });
+    });
+  })();
 
   /* ---------- feedback ---------- */
   function openFeedback() {
@@ -801,6 +1008,15 @@
     if (t.closest('#btn-config')) { openSettings(); return; }
     if (t.closest('#btn-refresh')) { refreshAll(); return; }
     if (t.closest('[data-feedback]')) { openFeedback(); return; }
+    var lk = t.closest('[data-like]');
+    if (lk) { likeMeme(lk.dataset.like); return; }
+    var ms = t.closest('[data-msort]');
+    if (ms) {
+      if (memes.sort !== ms.dataset.msort) { memes.sort = ms.dataset.msort; lsSet(LS_MSORT, memes.sort); memes.shown = MEMES_PAGE; renderMemes(); }
+      return;
+    }
+    if (t.closest('#memes-more')) { var from = memes.shown; memes.shown += MEMES_PAGE; renderMemes(from); return; }
+    if (t.closest('#memes-retry')) { memes.error = null; loadMemes(true); return; }
     if (t.closest('#ml-use')) { if (state.lastPicks.length) { state.lineup = state.lastPicks.slice(0, 5); saveLineup(); } return; }
     if (t.closest('#ml-edit')) { openLineupPicker(); return; }
     if (t.closest('#ml-clear')) { state.lineup = []; saveLineup(); return; }

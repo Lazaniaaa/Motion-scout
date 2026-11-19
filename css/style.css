@@ -739,3 +739,66 @@ body:not([data-tab="play"]) main.wrap { padding-top: 26px; }
   .ch-ax { font-size: 20px; }
   .ch-cnt { font-size: 20px; }
 }
+
+/* ---------- memes ---------- */
+.memes-top { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; margin-bottom: 18px; }
+.motw { padding: 16px 18px; }
+.motw-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 10px; }
+.motw-tag { font: 400 26px/1 var(--f-head); text-transform: uppercase; letter-spacing: 0.02em; color: var(--pink); }
+.motw-sub { font-size: 14px; }
+.motw-empty { margin: 6px 0 4px; color: #D6E0F0; }
+.motw .meme { clip-path: none; border: 0; background: transparent; padding: 0; }
+.meme-form { padding: 16px 18px; }
+.meme-form h3 { margin: 0 0 8px; font: 400 26px/1 var(--f-head); text-transform: uppercase; letter-spacing: 0.02em; }
+.meme-steps { margin: 0 0 14px; padding-left: 20px; color: #D6E0F0; font-size: 15px; }
+.meme-steps li { margin: 3px 0; }
+.meme-steps li::marker { color: var(--cyan); font-weight: 700; }
+.fb-field select {
+  width: 100%; padding: 10px 12px; font: 400 15px/1.4 var(--f-body); color: var(--text); text-transform: none; letter-spacing: 0;
+  background: rgba(1, 14, 31, 0.7); border: 1px solid var(--line);
+}
+.fb-field select:focus { outline: none; border-color: var(--cyan); }
+.meme-form-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.meme-form-row .fb-status { flex: 1 1 200px; }
+.fb-status.ok-text { color: var(--cyan); }
+.memes-bar { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); }
+.seg-btn {
+  padding: 7px 16px; cursor: pointer; background: transparent; border: 0; color: var(--muted);
+  font: 700 14px/1 var(--f-cond); letter-spacing: 0.1em; text-transform: uppercase;
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+.seg-btn:hover { color: var(--text); }
+.seg-btn.active { color: var(--navy); background: var(--cyan); }
+.memes-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.memes-wall > .empty { grid-column: 1 / -1; }
+.meme { display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 8px; min-width: 0; }
+.meme-embed { min-width: 0; }
+.meme-embed .twitter-tweet, .meme-embed iframe { margin: 0 auto !important; max-width: 100% !important; }
+.meme.is-embedded .meme-fallback { display: none; }
+.meme.is-gone { display: none; }
+.meme-fallback { padding: 8px 6px 2px; font-size: 15px; }
+.meme-fallback p { margin: 0 0 6px; }
+.meme-text { white-space: pre-line; color: #D6E0F0; overflow-wrap: anywhere; }
+.meme-foot { display: flex; align-items: center; gap: 10px; padding: 0 2px; min-width: 0; }
+.meme-like {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; cursor: pointer; flex: none;
+  color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 999px;
+  font: 700 15px/1 var(--f-cond); letter-spacing: 0.04em;
+}
+.meme-like svg { fill: none; stroke: currentColor; stroke-width: 2; }
+.meme-like:hover { color: var(--pink); border-color: var(--pink); }
+.meme-like.is-liked { color: #fff; background: var(--pink); border-color: var(--pink); cursor: default; }
+.meme-like.is-liked svg { fill: currentColor; }
+.meme-creator {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 10px 2px 2px; cursor: pointer;
+  color: var(--text); background: var(--navy-3); border: 1px solid var(--line); border-radius: 999px;
+  font: 600 14px/1.2 var(--f-cond); letter-spacing: 0.02em;
+}
+.meme-creator span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meme-creator:hover { border-color: var(--cyan); }
+.meme-time { margin-left: auto; flex: none; font-size: 13px; }
+.memes-more { display: flex; justify-content: center; margin-top: 16px; }
+.link-btn { padding: 0; cursor: pointer; color: var(--cyan); background: none; border: 0; font: inherit; text-decoration: underline; }
+@media (max-width: 860px) { .memes-top { grid-template-columns: 1fr; } .meme-form { order: -1; } }
+@media (max-width: 420px) { .memes-wall { grid-template-columns: 1fr; } .motw, .meme-form { padding: 14px; } }

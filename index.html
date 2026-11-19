@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261119av">
+  <link rel="stylesheet" href="css/style.css?v=20261119aw">
 </head>
 <body>
   <nav class="topnav" aria-label="Sections">
@@ -20,6 +20,7 @@
         <a href="#play" data-tab="play">How to play</a>
         <a href="#build" data-tab="build" class="topnav-cta">Build a deck</a>
         <a href="#leaderboard" data-tab="leaderboard">Leaderboard</a>
+        <a href="#memes" data-tab="memes">Memes</a>
         <a href="#about" data-tab="about">About</a>
       </div>
     </div>
@@ -236,6 +237,42 @@
 
     </div>
 
+    <div class="view" data-views="memes">
+    <section id="memes-section" class="block">
+      <div class="block-head">
+        <h2 class="h-tag">Memes</h2>
+        <p class="muted">Motion memes made by the community. Like your favorites: the most-liked meme each week becomes Meme of the week.</p>
+      </div>
+      <div class="memes-top">
+        <div id="motw" class="motw card-cut"></div>
+        <form id="meme-form" class="meme-form card-cut" novalidate>
+          <h3>Submit your meme</h3>
+          <ol class="meme-steps">
+            <li>Post it on X with a picture, GIF or video. Tag <a href="https://x.com/motiongame_" target="_blank" rel="noopener">@motiongame_</a> or quote one of their posts.</li>
+            <li>Paste the link to your post here.</li>
+            <li>It shows up on the wall after a quick review.</li>
+          </ol>
+          <label class="fb-field"><span>Link to your post on X</span><input type="url" id="meme-url" inputmode="url" autocomplete="off" placeholder="https://x.com/you/status/…" required></label>
+          <label class="fb-field"><span>Which creator is it about? <em>optional</em></span><select id="meme-creator"><option value="">— none</option></select></label>
+          <label class="fb-hp" aria-hidden="true">Website<input type="text" id="meme-website" tabindex="-1" autocomplete="off"></label>
+          <div class="meme-form-row">
+            <button type="submit" class="btn btn-pink" id="meme-send"><span>Submit</span></button>
+            <p class="fb-status" id="meme-status" aria-live="polite"></p>
+          </div>
+        </form>
+      </div>
+      <div class="memes-bar">
+        <div class="seg" role="group" aria-label="Sort memes">
+          <button type="button" class="seg-btn" data-msort="new">New</button>
+          <button type="button" class="seg-btn" data-msort="top">Top</button>
+        </div>
+        <span class="muted" id="memes-count"></span>
+      </div>
+      <div id="memes-wall" class="memes-wall"><div class="empty">Loading memes…</div></div>
+      <div class="memes-more"><button type="button" class="btn" id="memes-more" hidden><span>Show more</span></button></div>
+    </section>
+    </div>
+
     <div class="view" data-views="about">
     <section id="roadmap" class="block" aria-labelledby="roadmap-title">
       <div class="block-head">
@@ -296,11 +333,10 @@
   <dialog id="feedback" class="modal modal-narrow" aria-labelledby="feedback-title"></dialog>
   <button type="button" class="fb-float" data-feedback aria-label="Report a problem or suggest an idea">Feedback</button>
 
-  <script src="js/public-config.js?v=20261119av"></script>
-  <script src="js/lineup.js?v=20261119av"></script>
-  <script src="js/api.js?v=20261119av"></script>
-  <script src="js/creators-data.js?v=20261119av"></script>
-
-  <script src="js/app.js?v=20261119av"></script>
+  <script src="js/public-config.js?v=20261119aw"></script>
+  <script src="js/lineup.js?v=20261119aw"></script>
+  <script src="js/api.js?v=20261119aw"></script>
+  <script src="js/creators-data.js?v=20261119aw"></script>
+  <script src="js/app.js?v=20261119aw"></script>
 </body>
 </html>
