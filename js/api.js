@@ -58,9 +58,9 @@
       if (!cfg.apiUrl) return Promise.reject(new Error('no server URL'));
       return post(cfg.apiUrl, { mode: 'meme', url: m.url, creator: m.creator, website: m.website });
     },
-    likeMeme: function (cfg, id, voter) {
+    likeMeme: function (cfg, id, voter, undo) {
       if (!cfg.apiUrl) return Promise.reject(new Error('no server URL'));
-      return post(cfg.apiUrl, { mode: 'meme_like', id: id, voter: voter });
+      return post(cfg.apiUrl, { mode: 'meme_like', id: id, voter: voter, undo: !!undo });
     },
     score: function (cfg, csv, self) {
       var l = local(); if (l) return l.score(cfg, csv, self);
