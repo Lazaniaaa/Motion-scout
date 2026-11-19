@@ -997,7 +997,7 @@
             return '<label><input type="radio" name="fb-type" value="' + t + '"' + (i === 0 ? ' checked' : '') + '><span>' + (t === 'problem' ? 'Report a problem' : t === 'idea' ? 'Suggest an idea' : 'Something else') + '</span></label>';
           }).join('') + '</div>' +
         '<label class="fb-field"><span>Message</span><textarea id="fb-message" rows="6" maxlength="3000" placeholder="What happened, or what would make Motion Scout better?" required></textarea></label>' +
-        '<label class="fb-field"><span>Your X handle or email <em>optional, only if you want a reply</em></span><input type="text" id="fb-contact" maxlength="200" autocomplete="off" placeholder="@yourhandle"></label>' +
+        '<label class="fb-field"><span>Your email <em>· optional, only if you’d like a reply</em></span><input type="email" id="fb-contact" maxlength="200" autocomplete="email" inputmode="email" placeholder="you@example.com"></label>' +
         '<label class="fb-hp" aria-hidden="true">Website<input type="text" id="fb-website" tabindex="-1" autocomplete="off"></label>' +
         '<p class="fb-status" id="fb-status" aria-live="polite"></p>' +
       '</div>' +
@@ -1009,11 +1009,15 @@
       e.preventDefault();
       var msg = $('fb-message').value.trim(), st = $('fb-status');
       if (msg.length < 5) { st.className = 'fb-status err-text'; st.textContent = 'Please write a few words.'; $('fb-message').focus(); return; }
+      var contact = $('fb-contact').value.trim();
+      if (contact && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(contact)) {
+        st.className = 'fb-status err-text'; st.textContent = 'That email doesn’t look right. Leave it empty if you don’t need a reply.'; $('fb-contact').focus(); return;
+      }
       var checked = dlg.querySelector('input[name="fb-type"]:checked');
       $('fb-send').disabled = true;
       st.className = 'fb-status'; st.textContent = 'Sending…';
       withTimeout(API.feedback(state.cfg, {
-        type: checked ? checked.value : 'other', message: msg, contact: $('fb-contact').value.trim(),
+        type: checked ? checked.value : 'other', message: msg, contact: contact,
         page: document.body.getAttribute('data-tab') || '', website: $('fb-website').value
       }), 20000).then(function () {
         dlg.querySelector('.modal-body').innerHTML = '<p class="fb-done">Thanks! Your message was sent.</p>';
