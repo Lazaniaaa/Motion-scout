@@ -112,7 +112,7 @@
         var rows = (j.rows || []).filter(function (r) { return r.position > 0; }).map(function (r) {
           var c = byName[String(r.name || '').toLowerCase()];
           var key = (c && (c.x || c.name) || String(r.name)).toLowerCase();
-          return { key: key, name: r.name, handle: c && c.x ? c.x : null, position: r.position, delta: r.delta || 0 };
+          return { key: key, id: r.id || null, name: r.name, handle: c && c.x ? c.x : null, position: r.position, delta: r.delta || 0 };
         }).sort(function (a, b) { return a.position - b.position; });
         if (!rows.length) throw new Error('the leaderboard is empty');
         state.official = { asOf: j.asOf || j.capturedAt || '', rows: rows };
@@ -137,6 +137,7 @@
       var yt = s ? (s.stats || []).filter(function (p) { return p.platform === 'youtube'; })[0] : null;
       return {
         key: r.key, name: r.name, handle: r.handle || (s && s.handle) || r.name,
+        avatar: r.id ? 'https://leaderboard.motion.game/pfp/' + encodeURIComponent(r.id) + '.jpg' : null,
         position: r.position, delta: r.delta,
         stars: mineStars(r.key) || (s && s.stars != null ? s.stars : null), estStars: est, predictedStars: est,
         starsFrom: mineStars(r.key) ? 'yours' : (s && s.stars != null ? 'game' : null),
@@ -265,7 +266,7 @@
       lu.picks.map(function (p) {
         var r = myCards[p.c.key] && myCards[p.c.key].r;
         return '<button type="button" class="lineup-pick' + (r ? ' r-' + r : '') + '" data-key="' + esc(p.c.key) + '">' +
-          '<span class="lp-rank">#' + p.c.position + '</span>' +
+          '<span class="lp-top">' + avatarHtml(p.c, 34) + '<span class="lp-rank">#' + p.c.position + '</span></span>' +
           '<span class="lp-handle">@' + esc(p.c.handle) + '</span>' +
           '<span class="lp-meta"><b>' + (p.predicted ? '≈' : '') + p.stars + '★</b>' +
             (useCards && r ? ' · ' + esc(rarityLabel(r)) + ' <b>' + p.boost + '×</b>' : '') + '</span>' +
@@ -337,7 +338,7 @@
     var down = withMove.filter(function (c) { return c.weekChange < 0; }).sort(function (x, y) { return x.weekChange - y.weekChange || x.position - y.position; }).slice(0, 5);
     var item = function (c) {
       return '<button type="button" class="mv-item" data-key="' + esc(c.key) + '"><span class="mv-move">' + moveText(c.weekChange) + '</span>' +
-        '<span class="mv-who">@' + esc(c.handle) + '<small>#' + c.basePos + ' → #' + c.position + '</small></span>' + sparkline(c, 70, 20) + '</button>';
+        '<span class="mv-who">' + avatarHtml(c, 28) + '<span>@' + esc(c.handle) + '<small>#' + c.basePos + ' → #' + c.position + '</small></span></span>' + sparkline(c, 70, 20) + '</button>';
     };
     el.innerHTML = '<div class="movers card-cut"><div class="movers-head"><h3>Movers</h3><span class="muted">' + since + ' · ' + state.history.snapshots.length + ' snapshots</span></div>' +
       (up.length || down.length
@@ -371,7 +372,7 @@
       var bst = boost(c);
       nowVal += valueAt(c.position) * bst;
       if (c.basePos) baseVal += valueAt(c.basePos) * bst;
-      return '<tr data-key="' + esc(c.key) + '"><td>@' + esc(c.handle) + '</td><td>' + starsText(c) + '</td><td>' + (c.basePos ? '#' + c.basePos : '—') + '</td><td><b>#' + c.position + '</b></td><td>' +
+      return '<tr data-key="' + esc(c.key) + '"><td class="ml-who">' + avatarHtml(c, 26) + '@' + esc(c.handle) + '</td><td>' + starsText(c) + '</td><td>' + (c.basePos ? '#' + c.basePos : '—') + '</td><td><b>#' + c.position + '</b></td><td>' +
         (c.weekChange != null ? moveText(c.weekChange) : '—') + '</td><td>' + sparkline(c, 80, 20) + '</td></tr>';
     }).join('');
     var label = b.sinceLock ? 'At lock' : (b.baseT ? 'Since ' + esc(fTime(b.baseT)) : 'At lock');
@@ -399,6 +400,67 @@
     var full = state.lineup.length >= 5;
     Array.prototype.forEach.call($('lineup-dlg').querySelectorAll('input[data-ml]'), function (i) { i.disabled = full && !i.checked; });
     if ($('ml-count')) $('ml-count').textContent = state.lineup.length;
+  }
+
+  /* ---------- avatars and big charts ---------- */
+  // Profile pictures come from Motion's public leaderboard; initials show if one doesn't load.
+  function avatarHtml(c, size) {
+    var initials = String(c.name || c.handle || '?').split(/\s+/).map(function (w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
+    return '<span class="ava" style="width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.38) + 'px" aria-hidden="true"><i>' + esc(initials) + '</i>' +
+      (c.avatar ? '<img src="' + esc(c.avatar) + '" alt="" loading="lazy" decoding="async" onerror="this.remove()">' : '') + '</span>';
+  }
+  function shortTime(iso) {
+    var t = Date.parse(iso);
+    return isFinite(t) ? new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  }
+  // Rank over every logged snapshot, #1 at the top, with axes, points and Monday's lock.
+  function rankChart(c) {
+    var pts = c.series || [];
+    if (pts.length < 2) return '<p class="muted">The trend appears after the next leaderboard update (Motion updates about every 4 hours).</p>';
+    var W = 900, H = 240, L = 46, R = 16, T = 16, B = 34;
+    var t0 = Date.parse(pts[0].t), t1 = Date.parse(pts[pts.length - 1].t), span = Math.max(1, t1 - t0);
+    var ps = pts.map(function (x) { return x.p; }), best = Math.min.apply(null, ps), worst = Math.max.apply(null, ps);
+    var lo = Math.max(1, best - 2), hi = worst + 2;
+    var X = function (t) { return L + (Date.parse(t) - t0) / span * (W - L - R); };
+    var Y = function (p) { return T + (p - lo) / (hi - lo) * (H - T - B); };
+    var ticks = [lo, Math.round((lo + hi) / 2), hi];
+    var grid = ticks.map(function (p) {
+      return '<line class="ch-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(p).toFixed(1) + '" y2="' + Y(p).toFixed(1) + '"/>' +
+        '<text class="ch-ax" x="' + (L - 8) + '" y="' + (Y(p) + 4).toFixed(1) + '" text-anchor="end">#' + p + '</text>';
+    }).join('');
+    var xl = [pts[0], pts[Math.floor(pts.length / 2)], pts[pts.length - 1]].filter(function (x, i, a) { return a.indexOf(x) === i; }).map(function (x, i, a) {
+      return '<text class="ch-ax" x="' + X(x.t).toFixed(1) + '" y="' + (H - 10) + '" text-anchor="' + (i === 0 ? 'start' : i === a.length - 1 ? 'end' : 'middle') + '">' + esc(shortTime(x.t)) + '</text>';
+    }).join('');
+    var lock = state.board && state.board.lock ? state.board.lock.getTime() : null, lockLine = '';
+    if (lock && lock > t0 && lock < t1) {
+      var lx = X(new Date(lock).toISOString()).toFixed(1);
+      lockLine = '<line class="ch-lock" x1="' + lx + '" x2="' + lx + '" y1="' + T + '" y2="' + (H - B) + '"/><text class="ch-ax ch-lock-t" x="' + lx + '" y="' + (T + 10) + '" text-anchor="middle">lock</text>';
+    }
+    var line = pts.map(function (x, i) { return (i ? 'L' : 'M') + X(x.t).toFixed(1) + ' ' + Y(x.p).toFixed(1); }).join(' ');
+    var area = line + ' L' + X(pts[pts.length - 1].t).toFixed(1) + ' ' + (H - B) + ' L' + X(pts[0].t).toFixed(1) + ' ' + (H - B) + ' Z';
+    var dots = pts.map(function (x) { return '<circle class="ch-dot" cx="' + X(x.t).toFixed(1) + '" cy="' + Y(x.p).toFixed(1) + '" r="3.5"><title>' + esc(shortTime(x.t)) + ': #' + x.p + '</title></circle>'; }).join('');
+    var up = c.weekChange != null ? c.weekChange : pts[0].p - pts[pts.length - 1].p;
+    return '<svg class="rank-chart' + (up > 0 ? ' up' : up < 0 ? ' down' : '') + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Rank of @' + esc(c.handle) + ' over time, from #' + pts[0].p + ' to #' + pts[pts.length - 1].p + '">' +
+      grid + lockLine + '<path class="ch-area" d="' + area + '"/><path class="ch-line" d="' + line + '"/>' + dots + xl + '</svg>';
+  }
+  // Views per day as bars, the number of posts above each bar.
+  function dailyChart(s) {
+    var days = (s && s.daily) || [];
+    if (days.length < 2) return '';
+    var W = 900, H = 200, L = 8, R = 8, T = 22, B = 30, n = days.length;
+    var max = Math.max.apply(null, days.map(function (d) { return d[2] || 0; }).concat([1]));
+    var bw = (W - L - R) / n;
+    var bars = days.map(function (d, i) {
+      var h = (d[2] || 0) / max * (H - T - B), x = L + i * bw + bw * 0.15, y = H - B - h;
+      var label = i === 0 || i === n - 1 || i % 2 === 0 ? '<text class="ch-ax" x="' + (x + bw * 0.35).toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle">' + esc(d[0].slice(5).replace('-', '/')) + '</text>' : '';
+      return '<rect class="ch-bar' + (d[1] ? '' : ' empty') + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + (bw * 0.7).toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) + '" rx="3"><title>' + esc(d[0]) + ': ' + d[1] + ' posts, ' + fInt(d[2]) + ' views</title></rect>' +
+        (d[1] ? '<text class="ch-cnt" x="' + (x + bw * 0.35).toFixed(1) + '" y="' + (y - 6).toFixed(1) + '" text-anchor="middle">' + d[1] + '</text>' : '') + label;
+    }).join('');
+    return '<svg class="daily-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Views per day over the last ' + n + ' days">' + bars + '</svg>' +
+      '<p class="muted ch-note">Bars: views per day. Numbers: posts that day.</p>';
+  }
+  function tile(label, value, sub, cls) {
+    return '<div class="dt' + (cls ? ' ' + cls : '') + '"><small>' + label + '</small><b>' + value + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div>';
   }
 
   /* ---------- leaderboard ---------- */
@@ -466,8 +528,8 @@
       }).join('');
       return '<button type="button" class="rank-row t' + tierOf(c) + (c.position <= 3 ? ' top3' : '') + '" data-key="' + esc(c.key) + '">' +
         '<span class="r-rank">' + (c.position < 10 ? '0' : '') + c.position + '</span>' +
-        '<span class="r-who"><span class="r-handle">@' + esc(c.handle) + '</span><span class="r-name">' + esc(c.name) + '</span>' +
-          '<span class="chips">' + chipsFor(c) + '</span></span>' +
+        '<span class="r-who">' + avatarHtml(c, 38) + '<span class="r-whotext"><span class="r-handle">@' + esc(c.handle) + '</span><span class="r-name">' + esc(c.name) + '</span>' +
+          '<span class="chips">' + chipsFor(c) + '</span></span></span>' +
         '<span class="r-score">' + deltaHtml(c.delta) + '<small>change</small>' + sparkline(c, 64, 18) + '</span>' +
         '<span class="r-subs">' + (hasStats ? subs : '<span class="muted r-nostats">' + noStats + '</span>') + '</span>' +
         '<span class="r-stars"><span class="pred" title="' + (c.stars != null ? 'Stars from the game' : 'Estimated from rank') + '">' + starsText(c) + '</span><br><small>' + (c.starsFrom === 'yours' ? 'your card' : c.stars != null ? 'real' : 'from rank') + '</small></span>' +
@@ -495,42 +557,46 @@
   }
 
   /* ---------- detail modal ---------- */
-  function step(title, body) { return '<li><h4>' + title + '</h4>' + body + '</li>'; }
   function openDetail(key) {
     var c = state.board && state.board.list.filter(function (x) { return x.key === key; })[0];
     if (!c) return;
-    var h = '';
-    h += step('Official leaderboard',
-      '<p class="calc">Rank <b>#' + c.position + '</b> of ' + state.board.N + ' · ' + deltaHtml(c.delta) + ' since the last update</p>' +
-      '<p class="muted">As of ' + esc(fTime(state.official.asOf)) + '.</p>');
-    if (c.series && c.series.length > 1) {
-      h += step('Rank history',
-        '<div class="hist-chart">' + sparkline(c, 520, 90, true) + '</div>' +
-        '<p class="calc">' + esc(fTime(c.series[0].t)) + ': <b>#' + c.series[0].p + '</b> → now <b>#' + c.position + '</b>' +
-        (c.weekChange != null ? ' · ' + (state.board.sinceLock ? 'since Monday’s lock' : 'since ' + esc(fTime(state.board.baseT))) + ' ' + moveText(c.weekChange) : '') + '</p>');
+    var b = state.board, x = c.x, yt = c.yt;
+    var since = b.sinceLock ? 'Since Monday’s lock' : 'Since tracking started';
+    var head = '<div class="dh">' + avatarHtml(c, 72) +
+      '<div class="dh-who"><h2 id="detail-title">' + esc(c.name) + '</h2>' +
+        '<a class="dh-handle" href="https://x.com/' + encodeURIComponent(c.handle) + '" target="_blank" rel="noopener">@' + esc(c.handle) + '</a>' +
+        '<div class="chips">' + chipsFor(c) + (c.starsFrom === 'yours' ? '<span class="chip">your card</span>' : '') + '</div></div>' +
+      '<div class="dh-rank"><b>#' + c.position + '</b><small>of ' + b.N + '</small></div>' +
+      '<button type="button" class="modal-x" data-close aria-label="Close">✕</button></div>';
+    var tiles = '<div class="dtiles">' +
+      tile('Official rank', '#' + c.position, 'as of ' + esc(shortTime(state.official.asOf))) +
+      tile('Last update', moveText(c.delta), 'change in rank') +
+      tile(since, c.weekChange != null ? moveText(c.weekChange) : '—', c.basePos ? '#' + c.basePos + ' → #' + c.position : 'no history yet') +
+      tile('Stars', starsText(c), c.starsFrom === 'yours' ? 'from your card' : c.stars != null ? 'from the game' : 'estimated from rank', 'hot') +
+      tile('Deck value', fInt(c.points), '× your card’s boost') +
+    '</div>';
+    var body = '<section class="dsec"><h3>Rank history</h3>' + rankChart(c) + '</section>';
+    if (x) {
+      var eng = x.views > 0 ? (x.interactions / x.views * 100) : null;
+      body += '<section class="dsec"><h3>X · last ' + x.days + ' days <span class="muted">' + esc(x.dateFrom || '') + ' → ' + esc(x.dateTo || '') + '</span></h3><div class="dtiles">' +
+        tile('Followers', fK(x.followersNow)) +
+        tile('Posts', fInt(x.posts), x.activeDays + ' of ' + x.days + ' days active') +
+        tile('Views', fK(x.views), fK(x.posts ? x.views / x.posts : null) + ' per post') +
+        tile('Interactions', fK(x.interactions), fK(x.posts ? x.interactions / x.posts : null) + ' per post') +
+        tile('Engagement', eng == null ? '—' : eng.toFixed(eng < 1 ? 2 : 1) + '%', 'interactions ÷ views') +
+      '</div>' + dailyChart(x) +
+      '<p class="muted ch-note">Original posts and quotes only, as Motion counts them. Interactions = likes + replies + reposts + quotes.</p></section>';
+    } else {
+      body += '<section class="dsec"><h3>X</h3><p class="muted">' + (state.stats ? 'No stats collected for this creator yet.' : 'Creator stats temporarily unavailable.') + '</p></section>';
     }
-    h += step('Stars',
-      c.stars != null
-        ? '<p class="calc">' + (c.starsFrom === 'yours' ? 'Your card’s stars (from My cards)' : 'Real stars from the game') + ': <b>' + c.stars + '★</b></p>'
-        : '<p class="calc">≈<b>' + c.estStars + '★</b>, estimated from rank</p><p class="muted">Replaced by the real stars once they’re added.</p>');
-    h += step('In a deck',
-      '<p class="calc">Deck value <b>' + fInt(c.points) + '</b> × your card’s boost · costs <b>' + starsText(c) + '</b> of the cap</p>');
-    var rows = [c.x, c.yt].filter(Boolean).map(function (s) {
-      var p = PLATFORM[s.platform] || { label: s.platform };
-      return '<tr><td>' + esc(p.label) + '</td><td>@' + esc(s.handle) + '</td><td>' + fInt(s.followersNow) +
-        '</td><td>' + fInt(s.posts) + '</td><td>' + s.activeDays + '/' + s.days + '</td><td>' + fInt(s.interactions) + '</td><td>' + fInt(s.views) + '</td></tr>';
-    }).join('');
-    h += step('Last ' + state.cfg.windowDays + ' days',
-      rows
-        ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Platform</th><th>Handle</th><th>Followers</th><th>Posts</th><th>Active days</th><th>Interactions</th><th>Views</th></tr></thead><tbody>' +
-          rows + '</tbody></table></div><p class="muted">Interactions = likes + replies + reposts + quotes on X; likes + comments on YouTube.</p>'
-        : '<p class="muted">' + (state.stats ? 'No stats collected for this creator yet.' : 'Creator stats temporarily unavailable.') + '</p>');
+    if (yt) {
+      body += '<section class="dsec"><h3>YouTube · last ' + yt.days + ' days</h3><div class="dtiles">' +
+        tile('Subscribers', fK(yt.followersNow)) + tile('Videos', fInt(yt.posts)) + tile('Views', fK(yt.views)) + tile('Likes + comments', fK(yt.interactions)) +
+      '</div>' + dailyChart(yt) + '</section>';
+    }
     var dlg = $('detail');
-    dlg.innerHTML = '<div class="modal-head t' + tierOf(c) + '"><span class="big">#' + c.position + '</span><h2 id="detail-title">@' + esc(c.handle) + '</h2>' +
-      '<span class="big" style="color:var(--text)">' + starsText(c) + '</span>' +
-      '<button type="button" class="modal-x" data-close aria-label="Close">✕</button></div>' +
-      '<div class="modal-body"><p class="muted" style="margin-top:0">' + esc(c.name) + '</p><div class="chips" style="margin-bottom:6px">' + chipsFor(c) + '</div>' +
-      '<ol class="steps">' + h + '</ol></div>';
+    dlg.className = 'modal modal-detail t' + tierOf(c);
+    dlg.innerHTML = head + '<div class="modal-body">' + tiles + body + '</div>';
     dlg.showModal();
     dlg.scrollTop = 0;
   }

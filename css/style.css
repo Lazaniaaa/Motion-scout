@@ -682,3 +682,60 @@ body:not([data-tab="play"]) main.wrap { padding-top: 26px; }
 .fb-status.err-text { color: var(--pink); }
 .fb-done { margin: 8px 0; font: 400 22px/1.2 var(--f-head); text-transform: uppercase; color: var(--cyan); }
 @media (max-width: 640px) { .fb-float { right: 10px; bottom: 10px; padding: 9px 13px; } }
+
+/* ---------- avatars ---------- */
+.ava { position: relative; flex: none; display: inline-grid; place-items: center; border-radius: 50%; overflow: hidden; background: var(--navy-3); border: 1px solid var(--line); vertical-align: middle; }
+.ava i { font: 700 1em/1 var(--f-cond); font-style: normal; color: var(--muted); letter-spacing: 0.02em; }
+.ava img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.r-who { display: flex; align-items: center; gap: 10px; }
+.r-whotext { min-width: 0; }
+.lp-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.lp-top .lp-rank { margin: 0; }
+.mv-who { display: flex; align-items: center; gap: 8px; }
+.ml-who { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- creator window ---------- */
+.modal.modal-detail { width: min(1040px, calc(100vw - 24px)); }
+.dh { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 16px; padding: 18px 22px; background: linear-gradient(110deg, var(--navy-3), var(--navy-2)); border-bottom: 2px solid var(--pink); }
+.dh-who { flex: 1; min-width: 0; }
+.dh-who h2 { margin: 0; font: 400 clamp(24px, 4vw, 34px)/1.05 var(--f-head); text-transform: uppercase; overflow-wrap: anywhere; }
+.dh-handle { font: 700 15px/1.4 var(--f-cond); letter-spacing: 0.04em; color: var(--cyan); text-decoration: none; }
+.dh-handle:hover { color: var(--pink); }
+.dh-rank { text-align: right; }
+.dh-rank b { display: block; font: 400 46px/1 var(--f-head); color: var(--pink); font-style: italic; }
+.dh-rank small { font: 700 12px/1 var(--f-cond); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.dtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.dt { padding: 12px 14px; background: rgba(1, 14, 31, 0.55); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.dt small { display: block; font: 700 11px/1.2 var(--f-cond); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.dt b { display: block; margin-top: 6px; font: 400 28px/1 var(--f-head); }
+.dt b .dl { display: inline; font-size: 28px; }
+.dt span { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.dt.hot b { color: var(--cyan); }
+.dsec { margin-bottom: 22px; }
+.dsec h3 { margin: 0 0 10px; font: 400 22px/1.1 var(--f-head); text-transform: uppercase; letter-spacing: 0.02em; color: var(--cyan); }
+.dsec h3 .muted { font: 600 13px/1 var(--f-cond); letter-spacing: 0.06em; margin-left: 8px; }
+.rank-chart, .daily-chart { display: block; width: 100%; height: auto; background: rgba(1, 14, 31, 0.45); border: 1px solid var(--line); border-radius: 10px; }
+.ch-grid { stroke: rgba(147, 166, 196, 0.18); stroke-width: 1; }
+.ch-ax { fill: var(--muted); font: 600 13px var(--f-cond); }
+.ch-lock { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 5 5; }
+.ch-lock-t { fill: var(--warn); }
+.ch-line { fill: none; stroke: var(--muted); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.ch-area { fill: rgba(147, 166, 196, 0.08); }
+.ch-dot { fill: var(--navy); stroke: var(--muted); stroke-width: 2.5; }
+.rank-chart.up .ch-line, .rank-chart.up .ch-dot { stroke: #5CF08A; }
+.rank-chart.up .ch-area { fill: rgba(92, 240, 138, 0.10); }
+.rank-chart.down .ch-line, .rank-chart.down .ch-dot { stroke: var(--pink); }
+.rank-chart.down .ch-area { fill: rgba(255, 57, 119, 0.10); }
+.ch-bar { fill: var(--cyan); opacity: 0.85; }
+.ch-bar.empty { fill: rgba(147, 166, 196, 0.25); }
+.ch-cnt { fill: var(--text); font: 700 13px var(--f-cond); }
+.ch-note { margin: 6px 0 0; font-size: 13px; }
+@media (max-width: 640px) {
+  .dh { padding: 14px; gap: 10px; }
+  .dh .ava { width: 52px !important; height: 52px !important; }
+  .dh-rank b { font-size: 34px; }
+  .dtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dt b { font-size: 24px; }
+  .ch-ax { font-size: 20px; }
+  .ch-cnt { font-size: 20px; }
+}
