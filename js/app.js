@@ -678,7 +678,7 @@
     if (!keepScroll) window.scrollTo(0, 0);
     // the deck builder's slider and lists are measured on screen: redraw when its tab opens
     if (tab === 'build' && state.board) renderLineup();
-    if (tab === 'memes') loadMemes();
+    if (tab === 'memes') { loadMemes(); lsSet(LS_MEMES_SEEN, '1'); document.body.classList.add('memes-seen'); }
   }
   window.addEventListener('hashchange', function () {
     var tab = tabFromHash() || 'play';
@@ -743,7 +743,8 @@
   // official embed, so the author keeps the views and a deleted post disappears here too.
   // Likes are anonymous: one per browser per meme. Meme of the week = most liked since Monday's lock.
   var LS_VOTER = 'motionScout.voter.v1', LS_LIKED = 'motionScout.liked.v1', LS_MSORT = 'motionScout.memeSort.v1';
-  var MEMES_PAGE = 12;
+  var MEMES_PAGE = 12, LS_MEMES_SEEN = 'motionScout.memesSeen.v1';
+  if (lsGet(LS_MEMES_SEEN)) document.body.classList.add('memes-seen'); // the menu dot is only for people who haven't opened Memes yet
   var memes = { list: null, error: null, loading: false, sort: lsGet(LS_MSORT) === 'top' ? 'top' : 'new', shown: MEMES_PAGE, liked: {}, likeBusy: {}, motwId: null, winners: [], nextReveal: null };
   try { memes.liked = JSON.parse(lsGet(LS_LIKED) || '{}') || {}; } catch (e) { memes.liked = {}; }
   var CREATOR_BY_X = {};

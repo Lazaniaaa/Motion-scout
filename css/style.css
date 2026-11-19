@@ -850,3 +850,21 @@ body:not([data-tab="play"]) main.wrap { padding-top: 26px; }
 .meme-full .meme-embed { min-height: 0; }
 .meme-x { margin-left: auto; font: 700 14px/1 var(--f-cond); letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; }
 @media (max-width: 420px) { .memes-wall { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .meme { padding: 6px 6px 4px; } .meme-foot { flex-wrap: wrap; } .meme-creator span { max-width: 90px; } }
+
+/* Memes tab in the menu: shimmering label + a pulsing dot until the first visit */
+.topnav-links a.nav-memes { position: relative; }
+.nav-shine {
+  background: linear-gradient(100deg, var(--cyan) 0%, var(--cyan) 35%, #fff 50%, var(--pink) 62%, var(--cyan) 80%, var(--cyan) 100%);
+  background-size: 260% 100%; background-position: 100% 0;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: navShine 3.2s ease-in-out infinite;
+}
+.nav-dot {
+  position: absolute; top: 6px; right: 1px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--pink); box-shadow: 0 0 0 0 rgba(255, 57, 119, 0.7); animation: navPulse 1.6s ease-out infinite;
+}
+body.memes-seen .nav-dot { display: none; }
+@keyframes navShine { 0% { background-position: 100% 0; } 55%, 100% { background-position: 0% 0; } }
+@keyframes navPulse { 0% { box-shadow: 0 0 0 0 rgba(255, 57, 119, 0.7); } 80%, 100% { box-shadow: 0 0 0 5px rgba(255, 57, 119, 0); } }
+@media (prefers-reduced-motion: reduce) { .nav-shine, .nav-dot { animation: none; } .nav-shine { background-position: 50% 0; } }
+@media (max-width: 640px) { .nav-dot { top: 3px; right: 0; width: 6px; height: 6px; } }
