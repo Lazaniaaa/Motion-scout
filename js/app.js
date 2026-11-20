@@ -173,6 +173,7 @@
   function rebuild() {
     state.board = buildBoard();
     renderAll();
+    if (cpick) cpick.refresh();
   }
 
   /* ---------- render ---------- */
@@ -955,14 +956,96 @@
     dlg.showModal();
     embedMeme(dlg.querySelector('.meme'), m);
   }
+  // Creator picker: a searchable list with avatars (replaces a plain <select>, which can't be searched or styled).
+  // It opens inline, inside the form card, because the card's clip-path would cut off a floating dropdown.
+  var cpick = (function () {
+    var val = $('meme-creator'), btn = $('cpick-btn'), pop = $('cpick-pop'), q = $('cpick-search'), ul = $('cpick-list');
+    var items = [], shown = [], active = 0;
+    function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+    function people() {
+      var board = {};
+      (state.board ? state.board.list : []).forEach(function (c) { board[c.key] = c; });
+      return (MS.CREATORS || []).filter(function (c) { return c.x; }).map(function (c) {
+        var key = c.x.toLowerCase(), b = board[key];
+        return { key: key, name: c.name, handle: c.x, avatar: b ? b.avatar : null, rank: b ? b.position : null, s: norm(c.name + ' ' + c.x) };
+      }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    }
+    function find(key) { return items.filter(function (c) { return c.key === key; })[0]; }
+    function renderBtn() {
+      var c = find(val.value) || (val.value ? CREATOR_BY_X[val.value] && { name: CREATOR_BY_X[val.value].name, handle: CREATOR_BY_X[val.value].x } : null);
+      btn.innerHTML = c
+        ? avatarHtml(c, 26) + '<span class="cpick-who"><b>' + esc(c.name) + '</b><small>@' + esc(c.handle) + '</small></span><i class="cpick-caret" aria-hidden="true"></i>'
+        : '<span class="cpick-none">No creator</span><i class="cpick-caret" aria-hidden="true"></i>';
+    }
+    function rowHtml(c, i) {
+      var on = c ? c.key === val.value : !val.value;
+      return '<li role="option" id="cpick-o' + i + '" data-i="' + i + '" class="cpick-opt' + (i === active ? ' is-active' : '') + '" aria-selected="' + on + '">' +
+        (c ? avatarHtml(c, 28) + '<span class="cpick-who"><b>' + esc(c.name) + '</b><small>@' + esc(c.handle) + '</small></span>' + (c.rank ? '<span class="cpick-rank">#' + c.rank + '</span>' : '')
+           : '<span class="cpick-noava" aria-hidden="true">—</span><span class="cpick-who"><b>No creator</b><small>The meme isn’t about anyone in particular</small></span>') + '</li>';
+    }
+    function renderList() {
+      var t = norm(q.value.trim().replace(/^@/, ''));
+      shown = t ? items.filter(function (c) { return c.s.indexOf(t) >= 0; }) : [null].concat(items);
+      if (t) shown.sort(function (a, b) { return (a.s.indexOf(t) === 0 ? 0 : 1) - (b.s.indexOf(t) === 0 ? 0 : 1); });
+      if (active >= shown.length) active = Math.max(0, shown.length - 1);
+      ul.innerHTML = shown.length ? shown.map(rowHtml).join('') : '<li class="cpick-empty">No creator matches “' + esc(q.value.trim()) + '”</li>';
+      q.setAttribute('aria-activedescendant', shown.length ? 'cpick-o' + active : '');
+    }
+    function moveTo(i) {
+      if (!shown.length) return;
+      active = (i + shown.length) % shown.length;
+      Array.prototype.forEach.call(ul.children, function (li) { li.classList.toggle('is-active', +li.dataset.i === active); });
+      var li = $('cpick-o' + active);
+      if (li) li.scrollIntoView({ block: 'nearest' });
+      q.setAttribute('aria-activedescendant', 'cpick-o' + active);
+    }
+    function open() {
+      items = people();
+      q.value = '';
+      active = 0;
+      renderList();
+      var cur = shown.map(function (c) { return c ? c.key : ''; }).indexOf(val.value);
+      pop.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      $('cpick').classList.add('is-open');
+      if (cur > 0) moveTo(cur);
+      q.focus();
+    }
+    function close(focusBtn) {
+      if (pop.hidden) return;
+      pop.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      $('cpick').classList.remove('is-open');
+      if (focusBtn) btn.focus();
+    }
+    function choose(i) {
+      var c = shown[i];
+      if (c === undefined) return;
+      val.value = c ? c.key : '';
+      renderBtn();
+      close(true);
+    }
+    btn.addEventListener('click', function () { if (pop.hidden) open(); else close(true); });
+    q.addEventListener('input', function () { active = 0; renderList(); ul.scrollTop = 0; });
+    q.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveTo(active + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveTo(active - 1); }
+      else if (e.key === 'Enter') { e.preventDefault(); choose(active); }
+      else if (e.key === 'Escape') { e.preventDefault(); close(true); }
+      else if (e.key === 'Tab') close(false);
+    });
+    ul.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    ul.addEventListener('click', function (e) {
+      var li = e.target.closest('[data-i]');
+      if (li) choose(+li.dataset.i);
+    });
+    document.addEventListener('click', function (e) { if (!$('cpick').contains(e.target)) close(false); });
+    items = people();
+    renderBtn();
+    return { reset: function () { val.value = ''; renderBtn(); }, refresh: function () { items = people(); renderBtn(); } };
+  })();
   (function initMemeForm() {
     var sel = $('meme-creator');
-    (MS.CREATORS || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (c) {
-      if (!c.x) return;
-      var o = document.createElement('option');
-      o.value = c.x.toLowerCase(); o.textContent = c.name + ' (@' + c.x + ')';
-      sel.appendChild(o);
-    });
     $('meme-form').addEventListener('submit', function (e) {
       e.preventDefault();
       var url = $('meme-url').value.trim(), st = $('meme-status');
@@ -978,7 +1061,7 @@
         st.textContent = r.duplicate
           ? (r.status === 'live' ? 'That meme is already on the wall.' : 'Already submitted: it’s waiting for review.')
           : 'Thanks! Your meme is in review and shows up here once it’s approved.';
-        if (!r.duplicate) { $('meme-url').value = ''; sel.value = ''; }
+        if (!r.duplicate) { $('meme-url').value = ''; cpick.reset(); }
       }).catch(function (err) {
         st.className = 'fb-status err-text';
         st.textContent = /unknown mode/.test(err.message) ? 'Submissions open very soon. Please try again later.' : err.message;

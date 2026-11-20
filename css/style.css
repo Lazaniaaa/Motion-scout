@@ -753,11 +753,34 @@ body:not([data-tab="play"]) main.wrap { padding-top: 26px; }
 .meme-steps { margin: 0 0 14px; padding-left: 20px; color: #D6E0F0; font-size: 15px; }
 .meme-steps li { margin: 3px 0; }
 .meme-steps li::marker { color: var(--cyan); font-weight: 700; }
-.fb-field select {
-  width: 100%; padding: 10px 12px; font: 400 15px/1.4 var(--f-body); color: var(--text); text-transform: none; letter-spacing: 0;
+/* creator picker */
+.cpick-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 6px 12px; text-align: left; cursor: pointer;
+  font: 400 15px/1.2 var(--f-body); color: var(--text); text-transform: none; letter-spacing: 0;
   background: rgba(1, 14, 31, 0.7); border: 1px solid var(--line);
 }
-.fb-field select:focus { outline: none; border-color: var(--cyan); }
+.cpick-btn:hover, .cpick.is-open .cpick-btn { border-color: var(--cyan); }
+.cpick-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.cpick-none { flex: 1; color: var(--muted); }
+.cpick-caret { flex: none; margin-left: auto; width: 9px; height: 9px; border: solid var(--cyan); border-width: 0 2px 2px 0; transform: translateY(-2px) rotate(45deg); transition: transform 0.15s; }
+.cpick.is-open .cpick-caret { transform: translateY(2px) rotate(-135deg); }
+.cpick-who { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.cpick-who b { font: 700 16px/1.15 var(--f-cond); letter-spacing: 0.02em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cpick-who small { font: 500 13px/1.2 var(--f-body); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cpick-pop { margin-top: -7px; border: 1px solid var(--cyan); border-top-color: var(--line); background: var(--navy); text-transform: none; letter-spacing: 0; }
+.fb-field .cpick-search { margin: 0; border: 0; border-bottom: 1px solid var(--line); background: var(--navy-2); padding: 10px 12px 10px 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%237AFDFD' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l3.5 3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: 12px center; }
+.fb-field .cpick-search:focus { border-color: var(--line); }
+.cpick-search::-webkit-search-cancel-button { filter: invert(1) hue-rotate(150deg); }
+.cpick-list { list-style: none; margin: 0; padding: 4px 0; max-height: 264px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--navy-3) transparent; }
+.cpick-opt { display: flex; align-items: center; gap: 10px; padding: 7px 12px; cursor: pointer; border-left: 3px solid transparent; }
+.cpick-opt.is-active { background: var(--navy-3); border-left-color: var(--pink); }
+.cpick-opt[aria-selected="true"] .cpick-who b { color: var(--cyan); }
+.cpick-opt[aria-selected="true"]::after { content: '✓'; flex: none; font: 700 15px/1 var(--f-body); color: var(--cyan); }
+.cpick-rank { flex: none; font: 700 13px/1 var(--f-cond); letter-spacing: 0.06em; color: var(--muted); }
+.cpick-noava { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 50%; border: 1px dashed var(--line); color: var(--muted); font-size: 14px; }
+.cpick-empty { padding: 14px 12px; color: var(--muted); font-size: 14px; }
 .meme-form-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 .meme-form-row .fb-status { flex: 1 1 200px; }
 .fb-status.ok-text { color: var(--cyan); }

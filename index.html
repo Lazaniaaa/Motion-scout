@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261119bb">
+  <link rel="stylesheet" href="css/style.css?v=20261120cc">
 </head>
 <body>
   <nav class="topnav" aria-label="Sections">
@@ -253,7 +253,16 @@
             <li>It shows up on the wall after a quick review.</li>
           </ol>
           <label class="fb-field"><span>Link to your post on X</span><input type="url" id="meme-url" inputmode="url" autocomplete="off" placeholder="https://x.com/you/status/…" required></label>
-          <label class="fb-field"><span>Which creator is it about? <em>optional</em></span><select id="meme-creator"><option value="">— none</option></select></label>
+          <div class="fb-field cpick" id="cpick">
+            <span id="cpick-label">Which creator is it about? <em>optional</em></span>
+            <input type="hidden" id="meme-creator" value="">
+            <button type="button" class="cpick-btn" id="cpick-btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="cpick-label cpick-btn"></button>
+            <div class="cpick-pop" id="cpick-pop" hidden>
+              <input type="search" class="cpick-search" id="cpick-search" placeholder="Search a name or @handle" autocomplete="off" spellcheck="false"
+                role="combobox" aria-expanded="true" aria-controls="cpick-list" aria-autocomplete="list" aria-label="Search creators">
+              <ul class="cpick-list" id="cpick-list" role="listbox" aria-label="Creators"></ul>
+            </div>
+          </div>
           <label class="fb-hp" aria-hidden="true">Website<input type="text" id="meme-website" tabindex="-1" autocomplete="off"></label>
           <div class="meme-form-row">
             <button type="submit" class="btn btn-pink" id="meme-send"><span>Submit</span></button>
@@ -334,10 +343,10 @@
   <dialog id="meme-dlg" class="modal modal-meme" aria-labelledby="meme-dlg-title"></dialog>
   <button type="button" class="fb-float" data-feedback aria-label="Report a problem or suggest an idea">Feedback</button>
 
-  <script src="js/public-config.js?v=20261119bb"></script>
-  <script src="js/lineup.js?v=20261119bb"></script>
-  <script src="js/api.js?v=20261119bb"></script>
-  <script src="js/creators-data.js?v=20261119bb"></script>
-  <script src="js/app.js?v=20261119bb"></script>
+  <script src="js/public-config.js?v=20261120cc"></script>
+  <script src="js/lineup.js?v=20261120cc"></script>
+  <script src="js/api.js?v=20261120cc"></script>
+  <script src="js/creators-data.js?v=20261120cc"></script>
+  <script src="js/app.js?v=20261120cc"></script>
 </body>
 </html>
