@@ -439,10 +439,16 @@
     }
     var line = pts.map(function (x, i) { return (i ? 'L' : 'M') + X(x.t).toFixed(1) + ' ' + Y(x.p).toFixed(1); }).join(' ');
     var area = line + ' L' + X(pts[pts.length - 1].t).toFixed(1) + ' ' + (H - B) + ' L' + X(pts[0].t).toFixed(1) + ' ' + (H - B) + ' Z';
-    var dots = pts.map(function (x) { return '<circle class="ch-dot" cx="' + X(x.t).toFixed(1) + '" cy="' + Y(x.p).toFixed(1) + '" r="3.5"><title>' + esc(shortTime(x.t)) + ': #' + x.p + '</title></circle>'; }).join('');
+    var dots = pts.map(function (x) { return '<circle class="ch-dot" cx="' + X(x.t).toFixed(1) + '" cy="' + Y(x.p).toFixed(1) + '" r="3.5"/>'; }).join('');
+    var tips = pts.map(function (x, i) {
+      var d = i ? pts[i - 1].p - x.p : null;
+      var ch = d == null ? 'first snapshot' : d > 0 ? '<span class="pos">▲' + d + '</span> since the update before' : d < 0 ? '<span class="neg">▼' + (-d) + '</span> since the update before' : 'no change';
+      return [+X(x.t).toFixed(1), +Y(x.p).toFixed(1), '<small>' + esc(shortTime(x.t)) + '</small><b>#' + x.p + '</b><span>' + ch + '</span>'];
+    });
     var up = c.weekChange != null ? c.weekChange : pts[0].p - pts[pts.length - 1].p;
-    return '<svg class="rank-chart' + (up > 0 ? ' up' : up < 0 ? ' down' : '') + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Rank of @' + esc(c.handle) + ' over time, from #' + pts[0].p + ' to #' + pts[pts.length - 1].p + '">' +
-      grid + lockLine + '<path class="ch-area" d="' + area + '"/><path class="ch-line" d="' + line + '"/>' + dots + xl + '</svg>';
+    return chartWrap(tips, W, '<svg class="rank-chart' + (up > 0 ? ' up' : up < 0 ? ' down' : '') + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Rank of @' + esc(c.handle) + ' over time, from #' + pts[0].p + ' to #' + pts[pts.length - 1].p + '">' +
+      grid + lockLine + '<path class="ch-area" d="' + area + '"/><path class="ch-line" d="' + line + '"/>' + dots + xl +
+      '<line class="ch-cross" x1="0" x2="0" y1="' + T + '" y2="' + (H - B) + '"/><circle class="ch-hot" r="7" cx="-20" cy="-20"/></svg>');
   }
   // Views per day as bars, the number of posts above each bar.
   function dailyChart(s) {
@@ -454,12 +460,46 @@
     var bars = days.map(function (d, i) {
       var h = (d[2] || 0) / max * (H - T - B), x = L + i * bw + bw * 0.15, y = H - B - h;
       var label = i === 0 || i === n - 1 || i % 2 === 0 ? '<text class="ch-ax" x="' + (x + bw * 0.35).toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle">' + esc(d[0].slice(5).replace('-', '/')) + '</text>' : '';
-      return '<rect class="ch-bar' + (d[1] ? '' : ' empty') + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + (bw * 0.7).toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) + '" rx="3"><title>' + esc(d[0]) + ': ' + d[1] + ' posts, ' + fInt(d[2]) + ' views</title></rect>' +
+      return '<rect class="ch-bar' + (d[1] ? '' : ' empty') + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + (bw * 0.7).toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) + '" rx="3"/>' +
         (d[1] ? '<text class="ch-cnt" x="' + (x + bw * 0.35).toFixed(1) + '" y="' + (y - 6).toFixed(1) + '" text-anchor="middle">' + d[1] + '</text>' : '') + label;
     }).join('');
-    return '<svg class="daily-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Views per day over the last ' + n + ' days">' + bars + '</svg>' +
+    var tips = days.map(function (d, i) {
+      var day = new Date(d[0] + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+      return [+(L + i * bw + bw * 0.5).toFixed(1), +(H - B - (d[2] || 0) / max * (H - T - B)).toFixed(1), '<small>' + esc(day) + '</small><b>' + fInt(d[2] || 0) + '</b><span>views · ' + d[1] + ' post' + (d[1] === 1 ? '' : 's') + '</span>'];
+    });
+    return chartWrap(tips, W, '<svg class="daily-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Views per day over the last ' + n + ' days">' + bars +
+      '<rect class="ch-band" x="-100" y="' + T + '" width="' + bw.toFixed(1) + '" height="' + (H - T - B) + '"/></svg>') +
       '<p class="muted ch-note">Bars: views per day. Numbers: posts that day.</p>';
   }
+  // Hover (or tap) a chart to see the value at the nearest point: tips = [[x, y, html], ...] in viewBox units.
+  function chartWrap(tips, W, svg) {
+    return '<div class="ch-wrap" data-w="' + W + '" data-tips="' + esc(JSON.stringify(tips)) + '">' + svg + '<div class="ch-tip" aria-hidden="true"></div></div>';
+  }
+  function chartHover(e) {
+    var wrap = e.target.closest && e.target.closest('.ch-wrap');
+    if (!wrap) return;
+    var tips = wrap._tips || (wrap._tips = JSON.parse(wrap.dataset.tips || '[]'));
+    var svg = wrap.querySelector('svg'), box = svg.getBoundingClientRect(), k = box.width / +wrap.dataset.w;
+    if (!tips.length || !k) return;
+    var vx = (e.clientX - box.left) / k, best = 0;
+    tips.forEach(function (p, i) { if (Math.abs(p[0] - vx) < Math.abs(tips[best][0] - vx)) best = i; });
+    var p = tips[best], tip = wrap.querySelector('.ch-tip');
+    var cross = svg.querySelector('.ch-cross'), hot = svg.querySelector('.ch-hot'), band = svg.querySelector('.ch-band');
+    if (cross) { cross.setAttribute('x1', p[0]); cross.setAttribute('x2', p[0]); }
+    if (hot) { hot.setAttribute('cx', p[0]); hot.setAttribute('cy', p[1]); }
+    if (band) band.setAttribute('x', p[0] - band.getAttribute('width') / 2);
+    if (wrap._shown !== best) { tip.innerHTML = p[2]; wrap._shown = best; }
+    wrap.classList.add('is-hover');
+    var px = p[0] * k, py = p[1] * k, tw = tip.offsetWidth, th = tip.offsetHeight;
+    var left = Math.min(Math.max(px - tw / 2, 4), box.width - tw - 4);
+    var top = py - th - 14 < 0 ? py + 16 : py - th - 14;
+    tip.style.transform = 'translate(' + Math.round(left) + 'px,' + Math.round(top) + 'px)';
+  }
+  document.addEventListener('pointermove', chartHover);
+  document.addEventListener('pointerdown', chartHover);
+  document.addEventListener('pointerover', function (e) {
+    Array.prototype.forEach.call(document.querySelectorAll('.ch-wrap.is-hover'), function (w) { if (!w.contains(e.target)) { w.classList.remove('is-hover'); w._shown = null; } });
+  });
   function tile(label, value, sub, cls) {
     return '<div class="dt' + (cls ? ' ' + cls : '') + '"><small>' + label + '</small><b>' + value + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</div>';
   }
@@ -888,7 +928,10 @@
     $('memes-count').textContent = list.length ? list.length + (list.length === 1 ? ' meme' : ' memes') : '';
     $('memes-more').hidden = list.length <= memes.shown;
     if (!list.length) {
-      wall.innerHTML = '<div class="empty">No memes on the wall yet. Be the first: post yours on X and submit it above.</div>';
+      var mk = MS.MemeMaker;
+      wall.innerHTML = '<div class="empty">No memes on the wall yet. Be the first: post yours on X and submit it above.' +
+        (mk ? ' Need one? Pick a template below, add your text and post it.' : '') + '</div>' +
+        (mk ? '<div class="mk-grid mk-wall-grid">' + mk.gridHtml('') + '</div>' : '');
       return;
     }
     from = from || 0;

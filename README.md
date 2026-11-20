@@ -9,8 +9,8 @@ A community tool for the **Motion Mogathon**: Motion's official leaderboard, eac
 - **How to play:** a 7-card walkthrough of cards, lineups, tournament week and scoring, from docs.motion.game.
 - **Build a deck:** the best 5 different creators for any star cap from 8 to 40, valued by Motion's official rank × your card boosts. Add the cards you own, with their rarity and stars, under *My cards*.
 - **My lineup this week:** track the five you submitted, from Monday's lineup lock to Friday's results.
-- **Leaderboard and Movers:** Motion's official creator ranks with a trend line for each creator, the biggest climbers and fallers since Monday's lock, and social stats from X where available.
-- **Memes:** a wall of Motion memes from the community. Post your meme on X, paste the link, and it shows up after a quick review. Like your favorites (tap again to take a like back). Every Sunday at 17:00 UTC the most-liked meme of the week is crowned Meme of the week. Open a meme to see the full post through X's official embed.
+- **Leaderboard and Movers:** Motion's official creator ranks with a trend line for each creator, the biggest climbers and fallers since Monday's lock, and social stats from X where available. Hover a chart (or tap it on a phone) to see the rank or the views at each point.
+- **Memes:** a wall of Motion memes from the community. Post your meme on X, paste the link, and it shows up after a quick review. Like your favorites (tap again to take a like back). Every Sunday at 17:00 UTC the most-liked meme of the week is crowned Meme of the week. Open a meme to see the full post through X's official embed. No meme yet? The **meme maker** has 49 popular templates (from imgflip) or takes your own picture: add text, drag it into place, then download it or post it on X with a ready-made, editable caption. Everything is drawn in your browser.
 - **What's next:** the roadmap.
 
 Stars are ≈ estimated from rank (Fantasy Top's published tier split) until real stars from the game are added.

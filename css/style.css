@@ -730,6 +730,25 @@ body:not([data-tab="play"]) main.wrap { padding-top: 26px; }
 .ch-bar.empty { fill: rgba(147, 166, 196, 0.25); }
 .ch-cnt { fill: var(--text); font: 700 13px var(--f-cond); }
 .ch-note { margin: 6px 0 0; font-size: 13px; }
+.ch-wrap { position: relative; touch-action: pan-y; }
+.ch-wrap svg { cursor: crosshair; }
+.ch-cross { stroke: rgba(122, 253, 253, 0.45); stroke-width: 1; stroke-dasharray: 3 4; visibility: hidden; }
+.ch-hot { fill: var(--cyan); stroke: var(--navy); stroke-width: 3; visibility: hidden; }
+.rank-chart.up .ch-hot { fill: #5CF08A; }
+.rank-chart.down .ch-hot { fill: var(--pink); }
+.ch-band { fill: rgba(122, 253, 253, 0.08); visibility: hidden; }
+.ch-wrap.is-hover .ch-cross, .ch-wrap.is-hover .ch-hot, .ch-wrap.is-hover .ch-band { visibility: visible; }
+.ch-tip {
+  position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; opacity: 0; transition: opacity 0.12s;
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; min-width: 110px; white-space: nowrap;
+  background: var(--navy); border: 1px solid var(--cyan); box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+}
+.ch-wrap.is-hover .ch-tip { opacity: 1; }
+.ch-tip small { font: 700 12px/1.2 var(--f-cond); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.ch-tip b { font: 400 26px/1 var(--f-head); color: var(--text); }
+.ch-tip span { font: 600 13px/1.2 var(--f-body); color: var(--muted); }
+.ch-tip .pos { color: #5CF08A; font-weight: 700; }
+.ch-tip .neg { color: var(--pink); font-weight: 700; }
 @media (max-width: 640px) {
   .dh { padding: 14px; gap: 10px; }
   .dh .ava { width: 52px !important; height: 52px !important; }
@@ -891,3 +910,61 @@ body.memes-seen .nav-dot { display: none; }
 @keyframes navPulse { 0% { box-shadow: 0 0 0 0 rgba(255, 57, 119, 0.7); } 80%, 100% { box-shadow: 0 0 0 5px rgba(255, 57, 119, 0); } }
 @media (prefers-reduced-motion: reduce) { .nav-shine, .nav-dot { animation: none; } .nav-shine { background-position: 50% 0; } }
 @media (max-width: 640px) { .nav-dot { top: 3px; right: 0; width: 6px; height: 6px; } }
+
+/* ---------- meme maker ---------- */
+.memes-bar .mk-open { margin-left: auto; padding: 8px 16px; font-size: 14px; }
+.modal-maker { width: min(1040px, calc(100vw - 24px)); }
+.mk-back { flex: none; width: 40px; height: 40px; cursor: pointer; background: none; border: 2px solid var(--line); color: var(--cyan); font: 700 20px/1 var(--f-body); }
+.mk-back:hover { border-color: var(--cyan); }
+.mk-intro { margin: 0 0 12px; }
+.mk-search {
+  width: 100%; margin-bottom: 14px; padding: 10px 12px 10px 36px; font: 400 15px/1.4 var(--f-body); color: var(--text);
+  background: rgba(1, 14, 31, 0.7) no-repeat 12px center; border: 1px solid var(--line);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%237AFDFD' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l3.5 3.5'/%3E%3C/svg%3E");
+}
+.mk-search:focus { outline: none; border-color: var(--cyan); }
+.mk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+.memes-wall > .mk-wall-grid { grid-column: 1 / -1; }
+.mk-tile {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px; cursor: pointer; text-align: left; color: var(--text);
+  background: var(--navy-2); border: 1px solid var(--line); transition: border-color 0.15s, transform 0.15s;
+}
+.mk-tile:hover { border-color: var(--cyan); transform: translateY(-2px); }
+.mk-thumb { display: grid; place-items: center; width: 100%; aspect-ratio: 1; overflow: hidden; background: #000a18; }
+.mk-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.mk-tile b { font: 700 13px/1.2 var(--f-cond); letter-spacing: 0.03em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mk-upload { border-style: dashed; border-color: rgba(255, 57, 119, 0.6); }
+.mk-upload .mk-thumb { background: rgba(255, 57, 119, 0.08); }
+.mk-plus { font: 400 44px/1 var(--f-head); color: var(--pink); }
+.mk-none { grid-column: 1 / -1; }
+.mk-edit, .mk-share { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 20px; align-items: start; }
+.mk-stage { position: relative; display: grid; place-items: center; min-height: 240px; background: #000a18; border: 1px solid var(--line); }
+#mk-canvas { display: none; max-width: 100%; max-height: 66vh; width: auto; height: auto; touch-action: none; }
+#mk-canvas.ready { display: block; }
+.mk-load { margin: 0; padding: 20px; text-align: center; }
+.mk-field { margin-bottom: 10px; padding: 8px; border: 1px solid var(--line); border-left: 3px solid transparent; background: rgba(1, 14, 31, 0.5); }
+.mk-field.is-active { border-left-color: var(--pink); border-color: rgba(122, 253, 253, 0.4); }
+.mk-field textarea {
+  display: block; width: 100%; padding: 8px 10px; resize: vertical; font: 400 15px/1.35 var(--f-body); color: var(--text);
+  background: rgba(1, 14, 31, 0.7); border: 1px solid var(--line);
+}
+.mk-field textarea:focus { outline: none; border-color: var(--cyan); }
+.mk-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.mk-row input[type=range] { flex: 1; accent-color: var(--cyan); }
+.mk-del { flex: none; width: 30px; height: 30px; cursor: pointer; color: var(--muted); background: none; border: 1px solid var(--line); font: 700 14px/1 var(--f-body); }
+.mk-del:hover { color: var(--pink); border-color: var(--pink); }
+.mk-add { margin: 2px 0 14px; font-weight: 600; }
+.mk-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 8px; }
+.mk-caps { display: inline-flex; align-items: center; gap: 6px; font: 700 13px/1 var(--f-cond); letter-spacing: 0.08em; color: var(--muted); cursor: pointer; }
+.mk-caps input { accent-color: var(--cyan); width: 16px; height: 16px; }
+.mk-tip { margin: 6px 0 0; font-size: 13px; }
+.mk-final { display: block; width: 100%; max-height: 62vh; object-fit: contain; background: #000a18; border: 1px solid var(--line); }
+.mk-share textarea { width: 100%; }
+.mk-share .meme-steps { margin-top: 4px; }
+.mk-share kbd { padding: 1px 5px; font: 600 12px/1.4 var(--f-body); border: 1px solid var(--line); border-bottom-width: 2px; background: var(--navy-3); }
+@media (max-width: 760px) {
+  .mk-edit, .mk-share { grid-template-columns: 1fr; gap: 14px; }
+  #mk-canvas { max-height: 52vh; }
+  .mk-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .memes-bar { flex-wrap: wrap; }
+}
