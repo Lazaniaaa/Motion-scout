@@ -1047,3 +1047,17 @@ body.memes-seen .nav-dot { display: none; }
   .xr-thirds { grid-template-columns: 1fr; }
   .sc-dot { r: 9; }
 }
+.act-tbl { font-size: 15px; }
+.act-tbl th { padding: 0; }
+.act-sort { width: 100%; padding: 8px; text-align: inherit; font: 700 11px/1.2 var(--f-cond); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); background: none; border: 0; cursor: pointer; white-space: nowrap; }
+.act-sort:hover, .act-sort.active { color: var(--cyan); }
+.act-tbl tbody tr { cursor: pointer; }
+.act-tbl tbody tr:hover td { background: var(--cyan-soft); }
+.act-tbl td.act-on { color: var(--cyan); font-weight: 700; }
+.act-who { display: inline-flex; align-items: center; gap: 8px; }
+.act-who b { font-weight: 700; }
+.act-more { margin-top: 12px; text-align: center; }
+@media (max-width: 760px) {
+  .act-tbl th:first-child, .act-tbl td:first-child { position: sticky; left: 0; z-index: 1; background: var(--navy-2); }
+  .act-who .ava { display: none; }
+}

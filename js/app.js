@@ -709,7 +709,7 @@
 
   /* ---------- insights: Week in Motion, steady vs swingy, X activity vs rank ---------- */
   var DAY = 864e5;
-  var ins = { week: 0, weekPicked: false, stabTop: true, xr: 'views' };
+  var ins = { week: 0, weekPicked: false, stabTop: true, xr: 'views', act: { key: 'ppd', dir: -1 }, actAll: false };
   function isoDay(t) { return new Date(t).toISOString().slice(0, 10); }
   function dayLabel(iso) { return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }); }
   function snapBefore(t) {
@@ -976,6 +976,44 @@
       '<div><small>Least ' + esc(M.axis) + ' (bottom third)</small><b class="' + (loC > 0 ? 'up' : loC < 0 ? 'down' : '') + '">' + f1(loC) + '</b><span>places on average</span></div></div>' +
       '<p class="muted ch-note">Motion also scores Instagram, TikTok and YouTube, which aren’t counted here, and a rank moves when everyone else’s scores move too. Read it as a hint, not a rule: the picture gets clearer as more weeks are collected.</p></div>';
   }
+  // Who posts the most on X, their average reach (views per post) and their rank.
+  var ACT = [
+    { key: 'handle', label: 'Creator' },
+    { key: 'ppd', label: 'Posts a day', get: function (r) { return r.ppd; }, fmt: fAvg },
+    { key: 'vpp', label: 'Avg reach', title: 'Average views per post', get: function (r) { return r.vpp; }, fmt: fK },
+    { key: 'vpd', label: 'Views a day', get: function (r) { return r.vpd; }, fmt: fK },
+    { key: 'rank', label: 'Rank now', get: function (r) { return r.c.position; }, fmt: function (v) { return '#' + v; } },
+    { key: 'avg', label: 'Avg rank · 7d', get: function (r) { return r.avg; }, fmt: function (v) { return v == null ? '—' : '#' + Math.round(v); } }
+  ];
+  function renderAct() {
+    var el = $('act');
+    if (!state.stats) { el.innerHTML = ''; return; }
+    var avgRank = {};
+    if (state.history) stabRows(7).rows.forEach(function (r) { avgRank[r.c.key] = sum(r.pts, function (x) { return x.p; }) / r.pts.length; });
+    var rows = state.board.list.filter(function (c) { return c.x && c.x.days; }).map(function (c) {
+      return { c: c, ppd: c.x.posts / c.x.days, vpp: c.x.posts ? c.x.views / c.x.posts : null, vpd: c.x.views / c.x.days, avg: avgRank[c.key] != null ? avgRank[c.key] : null };
+    });
+    var col = ACT.filter(function (a) { return a.key === ins.act.key; })[0], dir = ins.act.dir;
+    rows.sort(function (a, b) {
+      if (col.key === 'handle') return a.c.handle.toLowerCase().localeCompare(b.c.handle.toLowerCase()) * dir;
+      var va = col.get(a), vb = col.get(b);
+      if (va == null || vb == null) return (va == null) - (vb == null) || a.c.position - b.c.position;
+      return (va - vb) * dir || a.c.position - b.c.position;
+    });
+    var shown = ins.actAll ? rows : rows.slice(0, 20), days = state.stats.meta ? state.stats.meta.windowDays || 14 : 14;
+    var head = ACT.map(function (a) {
+      var on = a.key === ins.act.key;
+      return '<th' + (on ? ' aria-sort="' + (dir < 0 ? 'descending' : 'ascending') + '"' : '') + '><button type="button" class="act-sort' + (on ? ' active' : '') + '" data-act="' + a.key + '"' + (a.title ? ' title="' + a.title + '"' : '') + '>' + a.label + (on ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</button></th>';
+    }).join('');
+    var body = shown.map(function (r) {
+      return '<tr data-key="' + esc(r.c.key) + '"><td><span class="act-who">' + avatarHtml(r.c, 26) + '<b>@' + esc(r.c.handle) + '</b></span></td>' +
+        ACT.slice(1).map(function (a) { return '<td' + (a.key === ins.act.key ? ' class="act-on"' : '') + '>' + a.fmt(a.get(r)) + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>Who posts the most</h3><p class="muted">Posts a day, average reach (views per post) and views a day on X over the last ' + days +
+      ' days, next to each creator’s rank now and their average rank over the last 7 days. Click a column to sort, a creator to open their page.</p></div></div>' +
+      '<div class="tbl-wrap"><table class="tbl act-tbl"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
+      (rows.length > 20 ? '<div class="act-more"><button type="button" class="btn btn-ghost" data-act-all><span>' + (ins.actAll ? 'Show top 20' : 'Show all ' + rows.length) + '</span></button></div>' : '') + '</div>';
+  }
   var xrNarrow = window.innerWidth < 700;
   window.addEventListener('resize', function () { // the scatter is taller on phones
     var n = window.innerWidth < 700;
@@ -983,8 +1021,8 @@
   });
   function renderInsights() {
     if (!$('wk')) return;
-    if (!state.board) { $('wk').innerHTML = '<div class="empty">' + (state.officialError ? 'Couldn’t load Motion’s official leaderboard.' : 'Loading the official leaderboard…') + '</div>'; $('stab').innerHTML = $('xr').innerHTML = ''; return; }
-    renderWeek(); renderStab(); renderXr();
+    if (!state.board) { $('wk').innerHTML = '<div class="empty">' + (state.officialError ? 'Couldn’t load Motion’s official leaderboard.' : 'Loading the official leaderboard…') + '</div>'; $('stab').innerHTML = $('xr').innerHTML = $('act').innerHTML = ''; return; }
+    renderWeek(); renderAct(); renderStab(); renderXr();
   }
 
   /* ---------- settings (official game rules only) ---------- */
@@ -1520,6 +1558,15 @@
     if (wkb) { ins.week = +wkb.dataset.wk; ins.weekPicked = true; renderWeek(); return; }
     var stb = t.closest('[data-stab]');
     if (stb) { ins.stabTop = stb.dataset.stab === 'top'; renderStab(); return; }
+    var ab = t.closest('[data-act]');
+    if (ab) {
+      var k = ab.dataset.act;
+      ins.act = ins.act.key === k ? { key: k, dir: -ins.act.dir } : { key: k, dir: k === 'handle' || k === 'rank' || k === 'avg' ? 1 : -1 };
+      renderAct();
+      var again = document.querySelector('[data-act="' + k + '"]'); if (again) again.focus();
+      return;
+    }
+    if (t.closest('[data-act-all]')) { ins.actAll = !ins.actAll; renderAct(); return; }
     var xrb = t.closest('[data-xr]');
     if (xrb) { ins.xr = xrb.dataset.xr; renderXr(); return; }
     var cl = t.closest('[data-copy-link]');
