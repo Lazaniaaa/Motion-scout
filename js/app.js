@@ -157,7 +157,8 @@
       list.forEach(function (c) {
         var i = idx[c.name.toLowerCase()];
         if (i == null) return;
-        c.series = snaps.map(function (sn) { return { t: sn.t, p: sn.p[i] }; }).filter(function (x) { return x.p; });
+        c.hi = i; // column of this creator in the history snapshots
+        c.series =snaps.map(function (sn) { return { t: sn.t, p: sn.p[i] }; }).filter(function (x) { return x.p; });
         var b = base.p[i];
         c.basePos = b || null;
         c.weekChange = b ? b - c.position : null; // + = climbed
@@ -203,6 +204,9 @@
     var has = !!state.board;
     ['lineup-section', 'ranking-section'].forEach(function (id) { $(id).hidden = !has && !!state.officialError; });
     if (has) { renderLineup(); renderMyLineup(); renderMovers(); renderRanking(); }
+    if (document.body.getAttribute('data-tab') === 'insights') renderInsights();
+    if (has && detailKey && $('detail').open) { var st = $('detail').scrollTop; openDetail(detailKey, true); $('detail').scrollTop = st; } // stats or history arrived
+    if (pendingCreator && has) { var pc = pendingCreator.toLowerCase(), hit = state.board.list.filter(function (c) { return c.handle.toLowerCase() === pc; })[0]; if (hit) { pendingCreator = null; openDetail(hit.key); } }
   }
 
   function chipsFor(c) {
@@ -472,8 +476,9 @@
       '<p class="muted ch-note">Bars: views per day. Numbers: posts that day.</p>';
   }
   // Hover (or tap) a chart to see the value at the nearest point: tips = [[x, y, html], ...] in viewBox units.
-  function chartWrap(tips, W, svg) {
-    return '<div class="ch-wrap" data-w="' + W + '" data-tips="' + esc(JSON.stringify(tips)) + '">' + svg + '<div class="ch-tip" aria-hidden="true"></div></div>';
+  // xy: pick the nearest point in both directions (scatter charts) instead of by x only.
+  function chartWrap(tips, W, svg, xy) {
+    return '<div class="ch-wrap" data-w="' + W + '"' + (xy ? ' data-xy="1"' : '') + ' data-tips="' + esc(JSON.stringify(tips)) + '">' + svg + '<div class="ch-tip" aria-hidden="true"></div></div>';
   }
   function chartHover(e) {
     var wrap = e.target.closest && e.target.closest('.ch-wrap');
@@ -481,8 +486,9 @@
     var tips = wrap._tips || (wrap._tips = JSON.parse(wrap.dataset.tips || '[]'));
     var svg = wrap.querySelector('svg'), box = svg.getBoundingClientRect(), k = box.width / +wrap.dataset.w;
     if (!tips.length || !k) return;
-    var vx = (e.clientX - box.left) / k, best = 0;
-    tips.forEach(function (p, i) { if (Math.abs(p[0] - vx) < Math.abs(tips[best][0] - vx)) best = i; });
+    var vx = (e.clientX - box.left) / k, vy = (e.clientY - box.top) / k, best = 0, xy = !!wrap.dataset.xy;
+    var dist = function (p) { return xy ? (p[0] - vx) * (p[0] - vx) + (p[1] - vy) * (p[1] - vy) : Math.abs(p[0] - vx); };
+    tips.forEach(function (p, i) { if (dist(p) < dist(tips[best])) best = i; });
     var p = tips[best], tip = wrap.querySelector('.ch-tip');
     var cross = svg.querySelector('.ch-cross'), hot = svg.querySelector('.ch-hot'), band = svg.querySelector('.ch-band');
     if (cross) { cross.setAttribute('x1', p[0]); cross.setAttribute('x2', p[0]); }
@@ -598,14 +604,17 @@
   }
 
   /* ---------- detail modal ---------- */
-  function openDetail(key) {
+  var detailKey = null;
+  function openDetail(key, keepScroll) {
     var c = state.board && state.board.list.filter(function (x) { return x.key === key; })[0];
     if (!c) return;
+    detailKey = key;
     var b = state.board, x = c.x, yt = c.yt;
     var since = b.sinceLock ? 'Since Monday’s lock' : 'Since tracking started';
     var head = '<div class="dh">' + avatarHtml(c, 72) +
       '<div class="dh-who"><h2 id="detail-title">' + esc(c.name) + '</h2>' +
         '<a class="dh-handle" href="https://x.com/' + encodeURIComponent(c.handle) + '" target="_blank" rel="noopener">@' + esc(c.handle) + '</a>' +
+        '<button type="button" class="link-btn dh-copy" data-copy-link="' + esc(c.handle) + '">Copy link to this page</button>' +
         '<div class="chips">' + chipsFor(c) + (c.starsFrom === 'yours' ? '<span class="chip">your card</span>' : '') + '</div></div>' +
       '<div class="dh-rank"><b>#' + c.position + '</b><small>of ' + b.N + '</small></div>' +
       '<button type="button" class="modal-x" data-close aria-label="Close">✕</button></div>';
@@ -615,6 +624,7 @@
       tile(since, c.weekChange != null ? moveText(c.weekChange) : '—', c.basePos ? '#' + c.basePos + ' → #' + c.position : 'no history yet') +
       tile('Stars', starsText(c), c.starsFrom === 'yours' ? 'from your card' : c.stars != null ? 'from the game' : 'estimated from rank', 'hot') +
       tile('Deck value', fInt(c.points), '× your card’s boost') +
+      swingTile(c) +
     '</div>';
     var body = '<section class="dsec"><h3>Rank history</h3>' + rankChart(c) + '</section>';
     if (x) {
@@ -626,7 +636,8 @@
         tile('Interactions', fK(x.interactions), fK(x.posts ? x.interactions / x.posts : null) + ' per post') +
         tile('Engagement', eng == null ? '—' : eng.toFixed(eng < 1 ? 2 : 1) + '%', 'interactions ÷ views') +
       '</div>' + dailyChart(x) +
-      '<p class="muted ch-note">Original posts and quotes only, as Motion counts them. Interactions = likes + replies + reposts + quotes.</p></section>';
+      '<p class="muted ch-note">Original posts and quotes only, as Motion counts them. Interactions = likes + replies + reposts + quotes.</p></section>' +
+      rhythmHtml(x);
     } else {
       body += '<section class="dsec"><h3>X</h3><p class="muted">' + (state.stats ? 'No stats collected for this creator yet.' : 'Creator stats temporarily unavailable.') + '</p></section>';
     }
@@ -638,8 +649,342 @@
     var dlg = $('detail');
     dlg.className = 'modal modal-detail t' + tierOf(c);
     dlg.innerHTML = head + '<div class="modal-body">' + tiles + body + '</div>';
-    dlg.showModal();
-    dlg.scrollTop = 0;
+    if (!dlg.open) dlg.showModal();
+    if (!keepScroll) dlg.scrollTop = 0;
+    // a link to this creator's page: #c/<handle>
+    if (location.hash !== '#c/' + c.handle) history.replaceState(null, '', '#c/' + c.handle);
+  }
+  function creatorLink(handle) { return location.origin + location.pathname + '#c/' + handle; }
+  // Average posts a day / week, tournament days vs weekends, and the busiest weekdays.
+  function fAvg(n) { return n == null ? '—' : n < 10 ? n.toFixed(1).replace(/\.0$/, '') : fInt(n); }
+  function rhythmHtml(x) {
+    var d = (x && x.daily) || [];
+    if (d.length < 7) return '';
+    var NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    var wk = NAMES.map(function () { return { n: 0, posts: 0, views: 0 }; });
+    var wd = { n: 0, posts: 0 }, we = { n: 0, posts: 0 }, best = null, total = 0;
+    d.forEach(function (r) {
+      var i = (new Date(r[0] + 'T12:00:00Z').getUTCDay() + 6) % 7, g = i < 5 ? wd : we;
+      wk[i].n++; wk[i].posts += r[1]; wk[i].views += r[2] || 0;
+      g.n++; g.posts += r[1]; total += r[1];
+      if (r[1] && (!best || (r[2] || 0) > (best[2] || 0))) best = r;
+    });
+    var perDay = total / d.length, perWd = wd.n ? wd.posts / wd.n : null, perWe = we.n ? we.posts / we.n : null;
+    var tiles = '<div class="dtiles">' +
+      tile('Posts a day', fAvg(perDay), 'average over ' + d.length + ' days', 'hot') +
+      tile('Posts a week', fAvg(perDay * 7), 'at that pace') +
+      tile('Mon–Fri', fAvg(perWd == null ? null : perWd * 5), (perWd == null ? '—' : fAvg(perWd)) + ' a day, when tournaments score') +
+      tile('Sat–Sun', fAvg(perWe == null ? null : perWe * 2), (perWe == null ? '—' : fAvg(perWe)) + ' a day on weekends') +
+      tile('Best day', best ? fK(best[2]) : '—', best ? esc(dayLabel(best[0])) + ' · ' + best[1] + ' post' + (best[1] === 1 ? '' : 's') : 'no posts yet') +
+    '</div>';
+    var W = 900, H = 190, L = 8, R = 8, T = 24, B = 30, bw = (W - L - R) / 7;
+    var avg = wk.map(function (g) { return g.n ? g.posts / g.n : 0; });
+    var max = Math.max.apply(null, avg.concat([0.1]));
+    var bars = avg.map(function (v, i) {
+      var h = v / max * (H - T - B), xx = L + i * bw + bw * 0.18, y = H - B - h;
+      return '<rect class="ch-bar' + (i > 4 ? ' wkend' : '') + (v ? '' : ' empty') + '" x="' + xx.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + (bw * 0.64).toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) + '" rx="3"/>' +
+        '<text class="ch-cnt" x="' + (L + i * bw + bw / 2).toFixed(1) + '" y="' + (y - 7).toFixed(1) + '" text-anchor="middle">' + fAvg(v) + '</text>' +
+        '<text class="ch-ax" x="' + (L + i * bw + bw / 2).toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle">' + NAMES[i].slice(0, 3) + '</text>';
+    }).join('');
+    var tips = avg.map(function (v, i) {
+      var g = wk[i];
+      return [+(L + i * bw + bw / 2).toFixed(1), +(H - B - v / max * (H - T - B)).toFixed(1),
+        '<small>' + NAMES[i] + 's · ' + g.n + ' in the window</small><b>' + fAvg(v) + '</b><span>posts on average · ' + fK(g.n ? g.views / g.n : 0) + ' views</span>'];
+    });
+    return '<section class="dsec"><h3>Posting rhythm <span class="muted">X · last ' + d.length + ' days</span></h3>' + tiles +
+      chartWrap(tips, W, '<svg class="daily-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Average posts on X by day of the week">' + bars +
+        '<rect class="ch-band" x="-100" y="' + T + '" width="' + bw.toFixed(1) + '" height="' + (H - T - B) + '"/></svg>') +
+      '<p class="muted ch-note">Average posts on each day of the week. Tournaments score Monday to Friday; weekends are shown dimmer.</p></section>';
+  }
+  // How much the rank moved over the last 7 days, compared with every other creator.
+  function swingTile(c) {
+    if (!state.history || c.hi == null) return '';
+    var rows = stabRows(7).rows, me = rows.filter(function (r) { return r.c.key === c.key; })[0];
+    if (!me) return '';
+    var lower = rows.filter(function (r) { return r.sd < me.sd; }).length, pct = rows.length > 1 ? lower / (rows.length - 1) : 0;
+    var label = pct < 1 / 3 ? 'Steady' : pct > 2 / 3 ? 'Swingy' : 'Average swing';
+    return tile('Rank range · 7 days', me.best === me.worst ? '#' + me.best : '#' + me.best + '–' + me.worst,
+      label + ' (±' + me.sd.toFixed(1) + ' places, ' + (pct < 0.5 ? 'steadier than ' + Math.round((1 - pct) * 100) : 'swingier than ' + Math.round(pct * 100)) + '% of creators)');
+  }
+
+  /* ---------- insights: Week in Motion, steady vs swingy, X activity vs rank ---------- */
+  var DAY = 864e5;
+  var ins = { week: 0, weekPicked: false, stabTop: true, xr: 'views' };
+  function isoDay(t) { return new Date(t).toISOString().slice(0, 10); }
+  function dayLabel(iso) { return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }); }
+  function snapBefore(t) {
+    var s = state.history.snapshots, out = null;
+    for (var i = 0; i < s.length; i++) { if (Date.parse(s[i].t) <= t) out = s[i]; else break; }
+    return out;
+  }
+  function snapAfter(t) {
+    var s = state.history.snapshots;
+    for (var i = 0; i < s.length; i++) if (Date.parse(s[i].t) >= t) return s[i];
+    return null;
+  }
+  function snapsBetween(a, b) { return state.history.snapshots.filter(function (s) { var t = Date.parse(s.t); return t >= a && t <= b; }); }
+  function sdOf(a) {
+    var m = a.reduce(function (x, y) { return x + y; }, 0) / a.length;
+    return Math.sqrt(a.reduce(function (x, y) { return x + (y - m) * (y - m); }, 0) / a.length);
+  }
+  function xDaysFor(c, dates) {
+    var set = {};
+    dates.forEach(function (d) { set[d] = 1; });
+    return c.x && c.x.daily ? c.x.daily.filter(function (d) { return set[d[0]]; }) : [];
+  }
+  function sum(a, f) { return a.reduce(function (s, x) { return s + f(x); }, 0); }
+  // Spearman rank correlation: -1..1, how often a higher a goes with a higher b.
+  function spearman(a, b) {
+    var rk = function (v) {
+      var idx = v.map(function (x, i) { return i; }).sort(function (i, j) { return v[i] - v[j]; }), r = [];
+      for (var i = 0; i < idx.length;) {
+        var j = i; while (j + 1 < idx.length && v[idx[j + 1]] === v[idx[i]]) j++;
+        for (var k = i; k <= j; k++) r[idx[k]] = (i + j) / 2;
+        i = j + 1;
+      }
+      return r;
+    };
+    var ra = rk(a), rb = rk(b), n = a.length;
+    if (n < 3) return null;
+    var ma = sum(ra, Number) / n, mb = sum(rb, Number) / n, cov = 0, va = 0, vb = 0;
+    for (var i = 0; i < n; i++) { cov += (ra[i] - ma) * (rb[i] - mb); va += (ra[i] - ma) * (ra[i] - ma); vb += (rb[i] - mb) * (rb[i] - mb); }
+    return va && vb ? cov / Math.sqrt(va * vb) : null;
+  }
+
+  // Tournament weeks (Monday 7 AM ET lock to the next lock) that rank history covers, newest first.
+  function insightWeeks() {
+    var h = state.history;
+    if (!h || !h.snapshots.length) return [];
+    var first = Date.parse(h.snapshots[0].t), starts = [], L = lastLock(new Date()).getTime();
+    for (var i = 0; i < 52; i++) { starts.push(L); if (L <= first) break; L = lastLock(new Date(L - 60000)).getTime(); }
+    return starts.map(function (s, i) { return { start: s, end: i ? starts[i - 1] : null }; });
+  }
+  function weekStats(w) {
+    var end = w.end || Date.now(), late = false;
+    var s0 = snapBefore(w.start);
+    if (!s0) { s0 = snapAfter(w.start); late = true; }
+    var s1 = snapBefore(end);
+    if (!s0 || !s1 || Date.parse(s1.t) < w.start || Date.parse(s1.t) <= Date.parse(s0.t)) return null;
+    var within = snapsBetween(Date.parse(s0.t), Date.parse(s1.t));
+    var dates = [];
+    for (var i = 0; i < 7; i++) dates.push(isoDay(w.start + i * DAY));
+    var xDates = {};
+    var rows = state.board.list.filter(function (c) { return c.hi != null && s1.p[c.hi]; }).map(function (c) {
+      var a = s0.p[c.hi], b = s1.p[c.hi];
+      var ps = within.map(function (s) { return s.p[c.hi]; }).filter(Boolean);
+      var xd = xDaysFor(c, dates), top = null;
+      xd.forEach(function (d) { xDates[d[0]] = 1; if (d[1] && (!top || (d[2] || 0) > (top[2] || 0))) top = d; });
+      return {
+        c: c, a: a, b: b, change: a ? a - b : null, n: ps.length,
+        best: Math.min.apply(null, ps), worst: Math.max.apply(null, ps),
+        atTop: ps.filter(function (p) { return p === 1; }).length,
+        posts: xd.length ? sum(xd, function (d) { return d[1]; }) : null,
+        views: xd.length ? sum(xd, function (d) { return d[2] || 0; }) : null, top: top
+      };
+    });
+    return { w: w, s0: s0, s1: s1, late: late, n: within.length, rows: rows, xDates: dates.filter(function (d) { return xDates[d]; }) };
+  }
+  function wkRow(r, sub, val, cls) {
+    return '<li><button type="button" class="wk-row" data-key="' + esc(r.c.key) + '">' + avatarHtml(r.c, 30) +
+      '<span class="wk-who"><b>@' + esc(r.c.handle) + '</b><small>' + sub + '</small></span><span class="wk-val' + (cls ? ' ' + cls : '') + '">' + val + '</span></button></li>';
+  }
+  function wkBox(title, cls, items) {
+    return '<div class="wk-box' + (cls ? ' ' + cls : '') + '"><h4>' + title + '</h4>' +
+      (items.length ? '<ol class="wk-list">' + items.join('') + '</ol>' : '<p class="muted">Nobody yet.</p>') + '</div>';
+  }
+  function topBy(rows, f, n, keep) {
+    return rows.filter(keep).sort(function (a, b) { return f(b) - f(a) || a.b - b.b; }).slice(0, n);
+  }
+  function fRange(t0, t1) {
+    var a = new Date(t0), b = new Date(t1), o = { day: 'numeric', month: 'short', timeZone: 'UTC' };
+    return a.getUTCMonth() === b.getUTCMonth() ? a.getUTCDate() + '–' + b.toLocaleDateString('en-GB', o) : a.toLocaleDateString('en-GB', o) + ' – ' + b.toLocaleDateString('en-GB', o);
+  }
+  function weekMeme(w) {
+    if (!memes.list) return null;
+    var win = (memes.winners || []).filter(function (x) { var t = Date.parse(x.weekEnd); return t >= w.start && t < w.start + 7 * DAY; })[0];
+    return win ? { win: win, m: memeById(win.id) } : null;
+  }
+  function renderWeek() {
+    var el = $('wk');
+    if (!state.history) {
+      el.innerHTML = '<div class="empty">' + (state.historyError ? 'Rank history isn’t available right now.' : 'Loading rank history…') + '</div>';
+      return;
+    }
+    var weeks = insightWeeks().map(weekStats).filter(Boolean);
+    if (!weeks.length) { el.innerHTML = '<div class="empty">The week shows up after the next leaderboard update.</div>'; return; }
+    // early in a new week (under a day of updates), open last week's full recap unless a week was picked
+    if (!ins.weekPicked) ins.week = weeks.length > 1 && !weeks[0].w.end && Date.parse(weeks[0].s1.t) - weeks[0].w.start < DAY ? 1 : 0;
+    if (ins.week >= weeks.length) ins.week = 0;
+    var S = weeks[ins.week], rows = S.rows, live = !S.w.end;
+    var segLabel = function (x) { return !x.w.end ? 'This week' : 'Week of ' + new Date(x.w.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }); };
+    var seg = weeks.length > 1 ? '<div class="seg wk-seg" role="group" aria-label="Pick a week">' + weeks.slice(0, 6).map(function (x, i) {
+      return '<button type="button" class="seg-btn' + (i === ins.week ? ' active' : '') + '" data-wk="' + i + '" aria-pressed="' + (i === ins.week) + '">' + esc(segLabel(x)) + '</button>';
+    }).join('') + '</div>' : '';
+    var up = topBy(rows, function (r) { return r.change; }, 3, function (r) { return r.change > 0; });
+    var down = topBy(rows, function (r) { return -r.change; }, 3, function (r) { return r.change < 0; });
+    var steady = topBy(rows, function (r) { return -(r.worst - r.best); }, 3, function (r) { return r.n === S.n && r.b <= 30; });
+    var views = topBy(rows, function (r) { return r.views; }, 3, function (r) { return r.views > 0; });
+    var posts = topBy(rows, function (r) { return r.posts; }, 3, function (r) { return r.posts > 0; });
+    var days = topBy(rows, function (r) { return r.top[2] || 0; }, 3, function (r) { return r.top; });
+    var top1 = rows.filter(function (r) { return r.b === 1; })[0];
+    var xd = S.xDates.length, allViews = sum(rows, function (r) { return r.views || 0; }), allPosts = sum(rows, function (r) { return r.posts || 0; });
+    var span = esc(fRange(S.w.start, S.w.start + 6 * DAY));
+    var sub = 'Ranks ' + esc(shortTime(S.s0.t)) + ' → ' + esc(shortTime(S.s1.t)) + ' · ' + S.n + ' updates' + (S.late ? ' (tracking started mid-week)' : '') +
+      ' · X: ' + (xd ? xd + ' of 7 days' + (xd < 7 ? ', ' + esc(dayLabel(S.xDates[0]).slice(0, 3)) + '–' + esc(dayLabel(S.xDates[xd - 1]).slice(0, 3)) : '') : 'no days yet');
+    var hero = top1 ? '<button type="button" class="wk-hero" data-key="' + esc(top1.c.key) + '">' + avatarHtml(top1.c, 64) +
+      '<span><small>' + (live ? '#1 right now' : '#1 at the end of the week') + '</small><b>@' + esc(top1.c.handle) + '</b>' +
+      '<em>' + (top1.atTop === S.n ? 'held #1 in every update' : 'at #1 in ' + top1.atTop + ' of ' + S.n + ' updates') + '</em></span></button>' : '';
+    var nums = '<div class="wk-nums">' +
+      '<div><b>' + (up[0] ? '▲' + up[0].change : '–') + '</b><small>biggest climb' + (up[0] ? ' · @' + esc(up[0].c.handle) : '') + '</small></div>' +
+      '<div><b>' + (down[0] ? '▼' + (-down[0].change) : '–') + '</b><small>biggest fall' + (down[0] ? ' · @' + esc(down[0].c.handle) : '') + '</small></div>' +
+      '<div><b>' + (xd ? fK(allViews) : '—') + '</b><small>views on X, all creators</small></div>' +
+      '<div><b>' + (xd ? fInt(allPosts) : '—') + '</b><small>posts on X' + (xd ? ' · ' + fAvg(allPosts / xd) + ' a day' : '') + '</small></div></div>';
+    var meme = weekMeme(S.w), memeBox;
+    if (meme && meme.m) {
+      memeBox = '<div class="wk-box wk-meme"><h4>🏆 Meme of the week</h4><button type="button" class="wk-meme-btn" data-open-meme="' + esc(meme.m.id) + '">' +
+        (meme.m.media ? '<img src="' + esc(meme.m.media) + '" alt="Meme by @' + esc(meme.m.author) + '" loading="lazy" referrerpolicy="no-referrer">' : '<span class="meme-text">' + esc(meme.m.text || 'Open the post') + '</span>') +
+        '</button><p class="muted">by @' + esc(meme.m.author) + ' · ' + meme.win.likes + (meme.win.likes === 1 ? ' like' : ' likes') + '</p></div>';
+    } else {
+      memeBox = '<div class="wk-box wk-meme"><h4>🏆 Meme of the week</h4><p class="muted">' +
+        (live || !memes.list ? 'Crowned on Sunday at 17:00 UTC from the most-liked meme.' : 'No winner that week.') +
+        '</p><a class="link-btn" href="#memes">Go to the memes →</a></div>';
+    }
+    el.innerHTML = '<div class="wk card-cut">' +
+      '<div class="wk-head"><div><span class="wk-tag">Week in Motion</span><h3>' + span + (live ? ' <em class="wk-live">live</em>' : '') + '</h3><p class="muted">' + sub + '</p></div>' + seg + '</div>' +
+      '<div class="wk-top">' + hero + nums + '</div>' +
+      '<div class="wk-grid">' +
+        wkBox('Climbing', 'up', up.map(function (r) { return wkRow(r, '#' + r.a + ' → #' + r.b, '▲' + r.change, 'up'); })) +
+        wkBox('Falling', 'down', down.map(function (r) { return wkRow(r, '#' + r.a + ' → #' + r.b, '▼' + (-r.change), 'down'); })) +
+        wkBox('Held their place · top 30', '', steady.map(function (r) { return wkRow(r, r.best === r.worst ? 'never moved' : 'between #' + r.best + ' and #' + r.worst, '#' + r.b); })) +
+        wkBox('Most views on X', '', views.map(function (r) { return wkRow(r, fAvg(r.posts) + ' posts', fK(r.views)); })) +
+        wkBox('Posted the most', '', posts.map(function (r) { return wkRow(r, fAvg(r.posts / xd) + ' a day', fInt(r.posts)); })) +
+        wkBox('Biggest single day', '', days.map(function (r) { return wkRow(r, esc(dayLabel(r.top[0])) + ' · ' + r.top[1] + ' post' + (r.top[1] === 1 ? '' : 's'), fK(r.top[2])); })) +
+        memeBox +
+      '</div>' +
+      '<p class="wk-foot"><span>motion-scout.vercel.app</span><span class="muted">Community tool, not affiliated with Motion · ranks from Motion’s public leaderboard, posts and views from X</span></p></div>';
+  }
+
+  // Rank spread over the last `days` days of snapshots (standard deviation in places).
+  function stabRows(days) {
+    var s = state.history.snapshots, last = Date.parse(s[s.length - 1].t);
+    var win = snapsBetween(last - days * DAY, last);
+    var rows = state.board.list.filter(function (c) { return c.hi != null; }).map(function (c) {
+      var pts = win.map(function (x) { return { t: x.t, p: x.p[c.hi] }; }).filter(function (x) { return x.p; });
+      var ps = pts.map(function (x) { return x.p; });
+      return { c: c, pts: pts, sd: ps.length > 1 ? sdOf(ps) : null, best: Math.min.apply(null, ps), worst: Math.max.apply(null, ps) };
+    }).filter(function (r) { return r.sd != null; });
+    return { win: win, rows: rows };
+  }
+  function renderStab() {
+    var el = $('stab');
+    if (!state.history) { el.innerHTML = ''; return; }
+    var R = stabRows(7), rows = R.rows.filter(function (r) { return !ins.stabTop || r.c.position <= 25; });
+    if (R.win.length < 3) { el.innerHTML = ''; return; }
+    var item = function (r) {
+      return '<button type="button" class="st-item" data-key="' + esc(r.c.key) + '">' + avatarHtml(r.c, 30) +
+        '<span class="st-who"><b>@' + esc(r.c.handle) + '</b><small>' + (r.best === r.worst ? 'always #' + r.best : '#' + r.best + ' to #' + r.worst) + ' · now #' + r.c.position + '</small></span>' +
+        sparkline({ series: r.pts }, 80, 22) + '<span class="st-sd">±' + r.sd.toFixed(1) + '</span></button>';
+    };
+    var steady = rows.slice().sort(function (a, b) { return a.sd - b.sd || a.c.position - b.c.position; }).slice(0, 6);
+    var swingy = rows.slice().sort(function (a, b) { return b.sd - a.sd || a.c.position - b.c.position; }).slice(0, 6);
+    el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>Steady or swingy</h3><p class="muted">How far each creator’s rank moved over the last 7 days (' + R.win.length + ' updates since ' + esc(shortTime(R.win[0].t)) +
+      '). Steady cards keep their value through the week; swingy ones can win you a lot or cost you. ± is the typical distance from their average rank, in places.</p></div>' +
+      '<div class="seg" role="group" aria-label="Which creators"><button type="button" class="seg-btn' + (ins.stabTop ? ' active' : '') + '" data-stab="top" aria-pressed="' + ins.stabTop + '">Top 25</button>' +
+      '<button type="button" class="seg-btn' + (ins.stabTop ? '' : ' active') + '" data-stab="all" aria-pressed="' + !ins.stabTop + '">Everyone</button></div></div>' +
+      '<div class="movers-cols"><div><h4 class="st-h steady">Steadiest</h4>' + steady.map(item).join('') + '</div>' +
+      '<div><h4 class="st-h swingy">Swingiest</h4>' + swingy.map(item).join('') + '</div></div></div>';
+  }
+
+  // Does posting on X go with climbing? Each dot is a creator: X activity over the same days vs their rank change.
+  var XR = {
+    views: { label: 'Views', axis: 'views on X', get: function (r) { return r.views; } },
+    posts: { label: 'Posts', axis: 'posts on X', get: function (r) { return r.posts; } },
+    perPost: { label: 'Views per post', axis: 'views per post', get: function (r) { return r.posts ? r.views / r.posts : null; } }
+  };
+  function xrData() {
+    var meta = state.stats && state.stats.meta, s = state.history.snapshots;
+    if (!meta || !meta.dateTo) return null;
+    var first = Date.parse(s[0].t), lastSnap = Date.parse(s[s.length - 1].t);
+    var endT = Math.min(Date.parse(meta.dateTo + 'T00:00:00Z') + DAY, Math.floor(lastSnap / DAY) * DAY);
+    var startT = Math.max(endT - 7 * DAY, Math.ceil(first / DAY) * DAY);
+    if (endT - startT < 2 * DAY) return null;
+    var dates = [];
+    for (var t = startT; t < endT; t += DAY) dates.push(isoDay(t));
+    var s0 = snapBefore(startT) || snapAfter(startT), s1 = snapBefore(endT);
+    if (!s0 || !s1 || s0 === s1) return null;
+    var rows = state.board.list.filter(function (c) { return c.hi != null && c.x && s0.p[c.hi] && s1.p[c.hi]; }).map(function (c) {
+      var xd = xDaysFor(c, dates);
+      return { c: c, a: s0.p[c.hi], b: s1.p[c.hi], change: s0.p[c.hi] - s1.p[c.hi], posts: sum(xd, function (d) { return d[1]; }), views: sum(xd, function (d) { return d[2] || 0; }), days: xd.length };
+    }).filter(function (r) { return r.days === dates.length; });
+    return { dates: dates, s0: s0, s1: s1, rows: rows };
+  }
+  function renderXr() {
+    var el = $('xr');
+    if (!state.history || !state.stats) { el.innerHTML = ''; return; }
+    var D = xrData();
+    if (!D || D.rows.length < 10) { el.innerHTML = ''; return; }
+    var M = XR[ins.xr], rows = D.rows.filter(function (r) { return M.get(r) != null; });
+    var lg = function (v) { return Math.log(v + 1) / Math.LN10; };
+    var xs = rows.map(function (r) { return lg(M.get(r)); }), ch = rows.map(function (r) { return r.change; });
+    var rho = spearman(rows.map(M.get), ch);
+    var narrow = window.innerWidth < 700, W = narrow ? 520 : 900, H = narrow ? 460 : 380, L = narrow ? 60 : 52, R = 18, T = 18, B = 44;
+    // creators with none of it go in their own column on the left, so the scale starts where activity starts
+    var nz = xs.filter(function (v) { return v > 0; }), hasZero = nz.length < xs.length;
+    var x1 = Math.ceil(Math.max.apply(null, nz.concat([1]))), x0 = Math.min(x1 - 1, Math.floor(Math.min.apply(null, nz.concat([x1]))));
+    var zx = x0 - 0.6, lo = hasZero ? zx - 0.25 : x0;
+    xs = xs.map(function (v) { return v > 0 ? v : zx; });
+    var m = Math.max(3, Math.max.apply(null, ch.map(Math.abs))) + 1;
+    var X = function (v) { return L + (v - lo) / (x1 - lo) * (W - L - R); };
+    var Y = function (c) { return T + (m - c) / (2 * m) * (H - T - B); };
+    var grid = hasZero ? '<text class="ch-ax" x="' + X(zx).toFixed(1) + '" y="' + (H - 18) + '" text-anchor="middle">none</text>' +
+      '<line class="ch-grid ch-zero" x1="' + X(x0 - 0.3).toFixed(1) + '" x2="' + X(x0 - 0.3).toFixed(1) + '" y1="' + T + '" y2="' + (H - B) + '"/>' : '';
+    for (var k = x0; k <= x1; k++) {
+      grid += '<line class="ch-grid" x1="' + X(k).toFixed(1) + '" x2="' + X(k).toFixed(1) + '" y1="' + T + '" y2="' + (H - B) + '"/>' +
+        '<text class="ch-ax" x="' + X(k).toFixed(1) + '" y="' + (H - 18) + '" text-anchor="' + (k === x0 && !hasZero ? 'start' : k === x1 ? 'end' : 'middle') + '">' + (['1', '10', '100', '1K', '10K', '100K', '1M', '10M', '100M', '1B'][k] || fK(Math.pow(10, k))) + '</text>';
+    }
+    var step = m > 12 ? 10 : 5, yt = [];
+    for (var v = -Math.floor(m / step) * step; v <= m; v += step) yt.push(v);
+    grid += yt.map(function (v) {
+      return '<line class="ch-grid' + (v === 0 ? ' ch-zero' : '') + '" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/>' +
+        '<text class="ch-ax" x="' + (L - 8) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + (v > 0 ? '▲' + v : v < 0 ? '▼' + (-v) : '0') + '</text>';
+    }).join('');
+    var tips = [], dots = rows.map(function (r, i) {
+      var cx = X(xs[i]), cy = Y(r.change);
+      tips.push([+cx.toFixed(1), +cy.toFixed(1), '<small>@' + esc(r.c.handle) + ' · #' + r.a + ' → #' + r.b + '</small><b>' + (r.change > 0 ? '<span class="pos">▲' + r.change + '</span>' : r.change < 0 ? '<span class="neg">▼' + (-r.change) + '</span>' : '±0') + '</b>' +
+        '<span>' + fK(r.views) + ' views · ' + r.posts + (r.posts === 1 ? ' post' : ' posts') + (r.posts ? ' · ' + fK(r.views / r.posts) + ' a post' : '') + '</span>']);
+      return '<circle class="sc-dot' + (r.change > 0 ? ' up' : r.change < 0 ? ' down' : '') + '" cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="6"/>';
+    }).join('');
+    var svg = '<svg class="rank-chart xr-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Each creator’s ' + esc(M.axis) + ' against their rank change">' + grid + dots +
+      '<text class="ch-ax" x="' + (W - R) + '" y="' + (H - 2) + '" text-anchor="end">' + esc(M.axis) + ' (log scale) →</text><circle class="ch-hot" r="9" cx="-20" cy="-20"/></svg>';
+    // a plain-words verdict, plus the most and least active thirds
+    var sorted = rows.slice().sort(function (a, b) { return M.get(b) - M.get(a); }), third = Math.max(1, Math.floor(sorted.length / 3));
+    var avgCh = function (a) { return sum(a, function (r) { return r.change; }) / a.length; };
+    var hiC = avgCh(sorted.slice(0, third)), loC = avgCh(sorted.slice(-third));
+    var f1 = function (v) { return (v > 0 ? '▲' : v < 0 ? '▼' : '±') + Math.abs(v).toFixed(1); };
+    var a = rho == null ? 0 : Math.abs(rho);
+    var strength = a < 0.15 ? 'No clear link' : a < 0.35 ? 'A weak link' : a < 0.6 ? 'A clear link' : 'A strong link';
+    var dir = rho > 0 ? 'more ' + M.axis + ' went with climbing' : 'more ' + M.axis + ' went with falling';
+    var verdict = '<p class="xr-verdict"><b>' + strength + '</b>' + (a < 0.15 ? ': over these days, ' + esc(M.axis) + ' said little about who climbed.' : ': over these days, ' + esc(dir) + '.') +
+      ' <span class="muted">(Spearman ρ = ' + (rho == null ? '—' : rho.toFixed(2)) + ', ' + rows.length + ' creators)</span></p>';
+    el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>Does X move the rank?</h3><p class="muted">Each dot is a creator: their ' + esc(M.axis) + ' from ' + esc(dayLabel(D.dates[0])) + ' to ' + esc(dayLabel(D.dates[D.dates.length - 1])) +
+      ' against how many places they moved over the same days (rank at ' + esc(shortTime(D.s0.t)) + ' → ' + esc(shortTime(D.s1.t)) + '). Higher = climbed.</p></div>' +
+      '<div class="seg" role="group" aria-label="Measure">' + Object.keys(XR).map(function (k) {
+        return '<button type="button" class="seg-btn' + (ins.xr === k ? ' active' : '') + '" data-xr="' + k + '" aria-pressed="' + (ins.xr === k) + '">' + XR[k].label + '</button>';
+      }).join('') + '</div></div>' + verdict +
+      chartWrap(tips, W, svg, true) +
+      '<div class="xr-thirds"><div><small>Most ' + esc(M.axis) + ' (top third)</small><b class="' + (hiC > 0 ? 'up' : hiC < 0 ? 'down' : '') + '">' + f1(hiC) + '</b><span>places on average</span></div>' +
+      '<div><small>Least ' + esc(M.axis) + ' (bottom third)</small><b class="' + (loC > 0 ? 'up' : loC < 0 ? 'down' : '') + '">' + f1(loC) + '</b><span>places on average</span></div></div>' +
+      '<p class="muted ch-note">Motion also scores Instagram, TikTok and YouTube, which aren’t counted here, and a rank moves when everyone else’s scores move too. Read it as a hint, not a rule: the picture gets clearer as more weeks are collected.</p></div>';
+  }
+  var xrNarrow = window.innerWidth < 700;
+  window.addEventListener('resize', function () { // the scatter is taller on phones
+    var n = window.innerWidth < 700;
+    if (n !== xrNarrow) { xrNarrow = n; if (document.body.getAttribute('data-tab') === 'insights' && state.board && state.history) renderXr(); }
+  });
+  function renderInsights() {
+    if (!$('wk')) return;
+    if (!state.board) { $('wk').innerHTML = '<div class="empty">' + (state.officialError ? 'Couldn’t load Motion’s official leaderboard.' : 'Loading the official leaderboard…') + '</div>'; $('stab').innerHTML = $('xr').innerHTML = ''; return; }
+    renderWeek(); renderStab(); renderXr();
   }
 
   /* ---------- settings (official game rules only) ---------- */
@@ -696,7 +1041,9 @@
 
   /* ---------- tabs: one view at a time, chosen by the URL hash ---------- */
   // #play (How to play) · #build (Build a deck) · #leaderboard · #about. Old section links still work.
-  var TABS = ['play', 'build', 'leaderboard', 'memes', 'about'];
+  var TABS = ['play', 'build', 'leaderboard', 'insights', 'memes', 'about'];
+  var pendingCreator = null; // #c/<handle>: open that creator's page once the leaderboard loads
+  function creatorFromHash() { var m = (location.hash || '').match(/^#c\/(\w{1,30})$/); return m ? m[1] : null; }
   var OLD_HASH = { howto: 'play', top: 'play', 'lineup-section': 'build', 'check-section': 'build', deck: 'build',
     'ranking-section': 'leaderboard', roadmap: 'about', how: 'about' };
   var LS_TAB = 'motionScout.tab.v1';
@@ -720,8 +1067,11 @@
     // the deck builder's slider and lists are measured on screen: redraw when its tab opens
     if (tab === 'build' && state.board) renderLineup();
     if (tab === 'memes') { loadMemes(); lsSet(LS_MEMES_SEEN, '1'); document.body.classList.add('memes-seen'); }
+    if (tab === 'insights') { loadMemes(); renderInsights(); }
   }
   window.addEventListener('hashchange', function () {
+    var ch = creatorFromHash();
+    if (ch) { if (!document.body.getAttribute('data-tab')) showTab('leaderboard'); pendingCreator = ch; renderAll(); return; }
     var tab = tabFromHash() || 'play';
     if (location.hash.replace(/^#/, '') !== tab) history.replaceState(null, '', '#' + tab); // old section links → tab name
     showTab(tab);
@@ -957,7 +1307,10 @@
     }).catch(function (e) {
       if (/unknown mode/.test(e.message)) memes.list = []; // server not updated yet: just an empty wall
       else memes.error = e.message;
-    }).then(function () { memes.loading = false; memes.shown = MEMES_PAGE; memes.motwId = null; renderMemes(); });
+    }).then(function () {
+      memes.loading = false; memes.shown = MEMES_PAGE; memes.motwId = null; renderMemes();
+      if (document.body.getAttribute('data-tab') === 'insights' && state.board && state.history) renderWeek();
+    });
   }
   function setLikeButtons(m) {
     Array.prototype.forEach.call(document.querySelectorAll('[data-like="' + m.id + '"]'), function (b) {
@@ -1163,6 +1516,19 @@
     var closer = t.closest('[data-close]');
     if (closer) { closer.closest('dialog').close(); return; }
     if (t.tagName === 'DIALOG') { t.close(); return; } // click on backdrop
+    var wkb = t.closest('[data-wk]');
+    if (wkb) { ins.week = +wkb.dataset.wk; ins.weekPicked = true; renderWeek(); return; }
+    var stb = t.closest('[data-stab]');
+    if (stb) { ins.stabTop = stb.dataset.stab === 'top'; renderStab(); return; }
+    var xrb = t.closest('[data-xr]');
+    if (xrb) { ins.xr = xrb.dataset.xr; renderXr(); return; }
+    var cl = t.closest('[data-copy-link]');
+    if (cl) {
+      var link = creatorLink(cl.dataset.copyLink), done = function (ok) { cl.textContent = ok ? 'Link copied' : link; setTimeout(function () { cl.textContent = 'Copy link to this page'; }, 2500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(function () { done(true); }, function () { done(false); });
+      else done(false);
+      return;
+    }
     var dk = t.closest('[data-deck]');
     if (dk) { if (dk.dataset.deck === '1') deckNext(); else deckBack(); return; }
     var sb = t.closest('[data-sort]');
@@ -1246,6 +1612,11 @@
     $('cards-empty').hidden = shown > 0;
   });
 
+  // closing a creator's page puts the tab back in the address bar
+  $('detail').addEventListener('close', function () {
+    if (creatorFromHash()) history.replaceState(null, '', '#' + (document.body.getAttribute('data-tab') || 'leaderboard'));
+  });
+
   /* ---------- boot ---------- */
   try { applySaved(JSON.parse(lsGet(LS_SET) || '{}') || {}); } catch (e) { /* ignore bad settings */ }
   state.onlyMine = lsGet('motionScout.onlyMine.v1') !== '0';
@@ -1254,9 +1625,10 @@
   renderHow();
   renderAll();
   (function () {
-    var tab = tabFromHash() || lsGet(LS_TAB) || 'play';
+    pendingCreator = creatorFromHash();
+    var tab = pendingCreator ? 'leaderboard' : tabFromHash() || lsGet(LS_TAB) || 'play';
     if (TABS.indexOf(tab) < 0) tab = 'play';
-    if (location.hash.replace(/^#/, '') !== tab) history.replaceState(null, '', '#' + tab);
+    if (!pendingCreator && location.hash.replace(/^#/, '') !== tab) history.replaceState(null, '', '#' + tab);
     showTab(tab);
   })();
   loadOfficial();

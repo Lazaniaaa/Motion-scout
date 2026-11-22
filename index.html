@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261120ff">
+  <link rel="stylesheet" href="css/style.css?v=20261122a">
 </head>
 <body>
   <nav class="topnav" aria-label="Sections">
@@ -20,6 +20,7 @@
         <a href="#play" data-tab="play">How to play</a>
         <a href="#build" data-tab="build" class="topnav-cta">Build a deck</a>
         <a href="#leaderboard" data-tab="leaderboard">Leaderboard</a>
+        <a href="#insights" data-tab="insights">Insights</a>
         <a href="#memes" data-tab="memes" class="nav-memes"><span class="nav-shine">Memes</span><i class="nav-dot" aria-hidden="true"></i></a>
         <a href="#about" data-tab="about">About</a>
       </div>
@@ -206,7 +207,7 @@
 
     </div>
 
-    <div class="view" data-views="build leaderboard">
+    <div class="view" data-views="build leaderboard insights">
     <p id="data-status" class="data-status" aria-live="polite"></p>
     <div id="errors" role="alert"></div>
     </div>
@@ -235,6 +236,18 @@
       <div id="ranking" class="rank-list"><div class="empty">Loading the official leaderboard…</div></div>
     </section>
 
+    </div>
+
+    <div class="view" data-views="insights">
+    <section id="insights-section" class="block">
+      <div class="block-head">
+        <h2 class="h-tag h-tag-cyan">Insights</h2>
+        <p class="muted">The week in numbers, who holds their rank and who swings, and whether posting on X moves the leaderboard. Click a creator to open their page.</p>
+      </div>
+      <div id="wk"></div>
+      <div id="stab"></div>
+      <div id="xr"></div>
+    </section>
     </div>
 
     <div class="view" data-views="memes">
@@ -345,11 +358,11 @@
   <dialog id="maker-dlg" class="modal modal-maker" aria-labelledby="maker-title"></dialog>
   <button type="button" class="fb-float" data-feedback aria-label="Report a problem or suggest an idea">Feedback</button>
 
-  <script src="js/public-config.js?v=20261120ff"></script>
-  <script src="js/lineup.js?v=20261120ff"></script>
-  <script src="js/api.js?v=20261120ff"></script>
-  <script src="js/creators-data.js?v=20261120ff"></script>
-  <script src="js/app.js?v=20261120ff"></script>
-  <script src="js/meme-maker.js?v=20261120ff"></script>
+  <script src="js/public-config.js?v=20261122a"></script>
+  <script src="js/lineup.js?v=20261122a"></script>
+  <script src="js/api.js?v=20261122a"></script>
+  <script src="js/creators-data.js?v=20261122a"></script>
+  <script src="js/app.js?v=20261122a"></script>
+  <script src="js/meme-maker.js?v=20261122a"></script>
 </body>
 </html>
