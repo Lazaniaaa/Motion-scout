@@ -709,7 +709,7 @@
 
   /* ---------- insights: Week in Motion, steady vs swingy, X activity vs rank ---------- */
   var DAY = 864e5;
-  var ins = { week: 0, weekPicked: false, stabTop: true, xr: 'views', act: { key: 'ppd', dir: -1 }, actAll: false };
+  var ins = { week: 0, weekPicked: false, stabTop: true, xr: 'views', act: { key: 'ppd', dir: -1 }, actAll: false, eff: { key: 'gp', dir: -1 }, effAll: false };
   function isoDay(t) { return new Date(t).toISOString().slice(0, 10); }
   function dayLabel(iso) { return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }); }
   function snapBefore(t) {
@@ -1014,6 +1014,60 @@
       '<div class="tbl-wrap"><table class="tbl act-tbl"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
       (rows.length > 20 ? '<div class="act-more"><button type="button" class="btn btn-ghost" data-act-all><span>' + (ins.actAll ? 'Show top 20' : 'Show all ' + rows.length) + '</span></button></div>' : '') + '</div>';
   }
+  // Rank vs activity: each creator's place by posts (views, interactions) a day next to their place on Motion's board.
+  // Gap = activity place - rank place: positive = ranks higher than their posting would suggest.
+  var EFF = [
+    { key: 'handle', label: 'Creator' },
+    { key: 'rank', label: 'Avg rank · 7d', get: function (r) { return r.rank; }, fmt: function (v, r) { return '#' + r.rankPlace; } },
+    { key: 'ppd', label: 'Posts a day', get: function (r) { return r.ppd; }, fmt: function (v, r) { return fAvg(v) + ' <small>#' + r.pPlace + '</small>'; } },
+    { key: 'gp', label: 'Gap · posts', title: 'Place by posts a day minus place on the leaderboard', gap: 1, get: function (r) { return r.pPlace - r.rankPlace; } },
+    { key: 'vpd', label: 'Views a day', get: function (r) { return r.vpd; }, fmt: function (v, r) { return fK(v) + ' <small>#' + r.vPlace + '</small>'; } },
+    { key: 'gv', label: 'Gap · views', title: 'Place by views a day minus place on the leaderboard', gap: 1, get: function (r) { return r.vPlace - r.rankPlace; } },
+    { key: 'ipd', label: 'Interactions a day', title: 'Likes + replies + reposts + quotes a day', get: function (r) { return r.ipd; }, fmt: function (v, r) { return fK(v) + ' <small>#' + r.iPlace + '</small>'; } },
+    { key: 'gi', label: 'Gap · interactions', title: 'Place by interactions a day minus place on the leaderboard', gap: 1, get: function (r) { return r.iPlace - r.rankPlace; } }
+  ];
+  function fGap(g) { return g > 0 ? '<span class="dl up">▲' + g + '</span>' : g < 0 ? '<span class="dl down">▼' + (-g) + '</span>' : '<span class="dl">0</span>'; }
+  function placesBy(rows, f, prop) { // 1 = the most; ties share a place
+    var sorted = rows.slice().sort(function (a, b) { return f(b) - f(a); });
+    sorted.forEach(function (r, i) { r[prop] = i && f(sorted[i - 1]) === f(r) ? sorted[i - 1][prop] : i + 1; });
+  }
+  function renderEff() {
+    var el = $('eff');
+    if (!state.stats) { el.innerHTML = ''; return; }
+    var avgRank = {};
+    if (state.history) stabRows(7).rows.forEach(function (r) { avgRank[r.c.key] = sum(r.pts, function (x) { return x.p; }) / r.pts.length; });
+    var rows = state.board.list.filter(function (c) { return c.x && c.x.days; }).map(function (c) {
+      return { c: c, rank: avgRank[c.key] != null ? avgRank[c.key] : c.position, ppd: c.x.posts / c.x.days, vpd: c.x.views / c.x.days, ipd: (c.x.interactions || 0) / c.x.days };
+    });
+    placesBy(rows, function (r) { return -r.rank; }, 'rankPlace');
+    placesBy(rows, function (r) { return r.ppd; }, 'pPlace');
+    placesBy(rows, function (r) { return r.vpd; }, 'vPlace');
+    placesBy(rows, function (r) { return r.ipd; }, 'iPlace');
+    var col = EFF.filter(function (a) { return a.key === ins.eff.key; })[0], dir = ins.eff.dir;
+    rows.sort(function (a, b) {
+      if (col.key === 'handle') return a.c.handle.toLowerCase().localeCompare(b.c.handle.toLowerCase()) * dir;
+      return (col.get(a) - col.get(b)) * dir || a.rankPlace - b.rankPlace;
+    });
+    var shown = ins.effAll ? rows : rows.slice(0, 20);
+    var head = EFF.map(function (a) {
+      var on = a.key === ins.eff.key;
+      return '<th' + (on ? ' aria-sort="' + (dir < 0 ? 'descending' : 'ascending') + '"' : '') + (a.gap ? ' class="eff-gap"' : '') + '><button type="button" class="act-sort' + (on ? ' active' : '') + '" data-eff="' + a.key + '"' + (a.title ? ' title="' + a.title + '"' : '') + '>' + a.label + (on ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</button></th>';
+    }).join('');
+    var body = shown.map(function (r) {
+      return '<tr data-key="' + esc(r.c.key) + '"><td><span class="act-who">' + avatarHtml(r.c, 26) + '<b>@' + esc(r.c.handle) + '</b></span></td>' +
+        EFF.slice(1).map(function (a) { return '<td class="' + (a.gap ? 'eff-gap' : '') + (a.key === ins.eff.key ? ' act-on' : '') + '">' + (a.gap ? fGap(a.get(r)) : a.fmt(a.get(r), r)) + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    // the two ends, in words
+    var byGap = rows.slice().sort(function (a, b) { return (b.pPlace - b.rankPlace) - (a.pPlace - a.rankPlace) || a.rankPlace - b.rankPlace; });
+    var hi = byGap.slice(0, 3), lo = byGap.slice(-3).reverse();
+    var names = function (a) { return a.map(function (r) { return '@' + esc(r.c.handle); }).join(', '); };
+    el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>Rank vs activity</h3><p class="muted">Each creator’s place among ' + rows.length +
+      ' creators by posts, views and interactions a day on X, next to their place on Motion’s board (average rank over 7 days). The gap is the difference in places: <b class="up-t">▲</b> means they rank higher than that activity would suggest, <b class="down-t">▼</b> lower. Click a column to sort.</p></div></div>' +
+      '<div class="eff-ends"><div><small>Most rank for their posts</small><b>' + names(hi) + '</b></div><div><small>Post the most for their rank</small><b>' + names(lo) + '</b></div></div>' +
+      '<div class="tbl-wrap"><table class="tbl act-tbl eff-tbl"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
+      (rows.length > 20 ? '<div class="act-more"><button type="button" class="btn btn-ghost" data-eff-all><span>' + (ins.effAll ? 'Show top 20' : 'Show all ' + rows.length) + '</span></button></div>' : '') +
+      '<p class="muted ch-note">X only: Motion also scores Instagram, TikTok and YouTube, so a big ▲ can simply mean a creator is strongest on another platform.</p></div>';
+  }
   var xrNarrow = window.innerWidth < 700;
   window.addEventListener('resize', function () { // the scatter is taller on phones
     var n = window.innerWidth < 700;
@@ -1021,8 +1075,8 @@
   });
   function renderInsights() {
     if (!$('wk')) return;
-    if (!state.board) { $('wk').innerHTML = '<div class="empty">' + (state.officialError ? 'Couldn’t load Motion’s official leaderboard.' : 'Loading the official leaderboard…') + '</div>'; $('stab').innerHTML = $('xr').innerHTML = $('act').innerHTML = ''; return; }
-    renderWeek(); renderAct(); renderStab(); renderXr();
+    if (!state.board) { $('wk').innerHTML = '<div class="empty">' + (state.officialError ? 'Couldn’t load Motion’s official leaderboard.' : 'Loading the official leaderboard…') + '</div>'; $('stab').innerHTML = $('xr').innerHTML = $('act').innerHTML = $('eff').innerHTML = ''; return; }
+    renderWeek(); renderAct(); renderEff(); renderStab(); renderXr();
   }
 
   /* ---------- settings (official game rules only) ---------- */
@@ -1567,6 +1621,15 @@
       return;
     }
     if (t.closest('[data-act-all]')) { ins.actAll = !ins.actAll; renderAct(); return; }
+    var eb = t.closest('[data-eff]');
+    if (eb) {
+      var ek = eb.dataset.eff;
+      ins.eff = ins.eff.key === ek ? { key: ek, dir: -ins.eff.dir } : { key: ek, dir: ek === 'handle' || ek === 'rank' ? 1 : -1 };
+      renderEff();
+      var again2 = document.querySelector('[data-eff="' + ek + '"]'); if (again2) again2.focus();
+      return;
+    }
+    if (t.closest('[data-eff-all]')) { ins.effAll = !ins.effAll; renderEff(); return; }
     var xrb = t.closest('[data-xr]');
     if (xrb) { ins.xr = xrb.dataset.xr; renderXr(); return; }
     var cl = t.closest('[data-copy-link]');
