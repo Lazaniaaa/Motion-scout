@@ -56,27 +56,59 @@
       promise.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
     });
   }
+  // Everything from the servers is checked before it's used: numbers are numbers, dates are dates.
+  function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+  function cleanStats(res) {
+    if (!res || typeof res !== 'object' || !res.meta || !Array.isArray(res.creators)) throw new Error('unexpected answer from the server');
+    res.creators = res.creators.filter(function (c) { return c && typeof c.key === 'string'; });
+    res.creators.forEach(function (c) {
+      c.stars = c.stars != null && isFinite(Number(c.stars)) ? Number(c.stars) : null;
+      c.stats = (Array.isArray(c.stats) ? c.stats : []).filter(function (x) { return x && typeof x === 'object'; });
+      c.stats.forEach(function (x) {
+        ['posts', 'activeDays', 'days', 'views', 'interactions', 'followersNow'].forEach(function (k) { if (x[k] != null) x[k] = num(x[k]); });
+        x.daily = (Array.isArray(x.daily) ? x.daily : []).filter(function (d) { return Array.isArray(d) && /^\d{4}-\d{2}-\d{2}$/.test(d[0]); })
+          .map(function (d) { return [d[0], Math.max(0, Math.round(num(d[1]))), Math.max(0, num(d[2]))]; })
+          .sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
+      });
+    });
+    return res;
+  }
+  function cleanHistory(h) {
+    if (!h || !Array.isArray(h.names) || !Array.isArray(h.snapshots)) throw new Error('unexpected answer from the server');
+    h.names = h.names.map(String);
+    h.snapshots = h.snapshots.filter(function (x) { return x && isFinite(Date.parse(x.t)) && Array.isArray(x.p); }).map(function (x) {
+      return { t: x.t, p: h.names.map(function (n, i) { var v = Math.round(Number(x.p[i])); return v > 0 && v < 10000 ? v : null; }) };
+    }).sort(function (a, b) { return Date.parse(a.t) - Date.parse(b.t); });
+    return h;
+  }
+  // A newer request wins: an answer that arrives after a later Refresh is ignored.
+  var gen = { stats: 0, history: 0, official: 0 };
   function loadStats() {
     state.statsError = null;
+    var g = ++gen.stats;
     withTimeout(API.live(state.cfg), 20000)
       .then(function (res) {
-        if (!res.creators || !res.creators.length) throw new Error((res.errors && res.errors[0]) || 'no data yet');
-        state.stats = res;
+        if (g !== gen.stats) return;
+        if (!res || !res.creators || !res.creators.length) throw new Error((res && res.errors && res.errors[0]) || 'no data yet');
+        state.stats = cleanStats(res);
         rebuild();
       })
-      .catch(function (e) { state.statsError = e.message; rebuild(); });
+      .catch(function (e) { if (g !== gen.stats) return; state.statsError = e.message; rebuild(); });
   }
 
   // Official leaderboard snapshots the server logs every 4 hours (rank history, movers, My lineup).
   function loadHistory() {
     state.historyError = null;
+    var g = ++gen.history;
     withTimeout(API.history(state.cfg), 20000)
       .then(function (h) {
-        if (!h || !h.snapshots || !h.snapshots.length) throw new Error('no snapshots yet');
+        if (g !== gen.history) return;
+        h = cleanHistory(h);
+        if (!h.snapshots.length) throw new Error('no snapshots yet');
         state.history = h;
         rebuild();
       })
-      .catch(function (e) { state.historyError = e.message; rebuild(); });
+      .catch(function (e) { if (g !== gen.history) return; state.historyError = e.message; rebuild(); });
   }
 
   // Minutes to add to UTC to get New York time at that moment (handles daylight saving).
@@ -84,7 +116,7 @@
     var m = d.toLocaleString('en-US', { timeZone: 'America/New_York', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
       .match(/(\d+)\/(\d+)\/(\d+),?\s*(\d+):(\d+)/);
     if (!m) return -300;
-    return Math.round((Date.UTC(+m[3], +m[1] - 1, +m[2], +m[4] % 24, +m[5]) - d.getTime()) / 60000);
+    return Math.round((Date.UTC(+m[3], +m[1] - 1, +m[2], +m[4] % 24, +m[5]) - Math.floor(d.getTime() / 60000) * 60000) / 60000); // both to the minute
   }
   // Lineups lock on Monday 7 AM ET: the latest such moment at or before `now`.
   function lastLock(now) {
@@ -104,21 +136,23 @@
     var url = state.cfg.officialUrl;
     if (!url || !window.fetch) { state.officialError = 'not configured'; rebuild(); return; }
     state.officialError = null;
-    var byName = {};
+    var byName = Object.create(null), g = ++gen.official;
     (MS.CREATORS || []).forEach(function (c) { byName[c.name.toLowerCase()] = c; });
-    fetch(url, { cache: 'no-store' })
+    withTimeout(fetch(url, { cache: 'no-store' }), 20000)
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (j) {
-        var rows = (j.rows || []).filter(function (r) { return r.position > 0; }).map(function (r) {
-          var c = byName[String(r.name || '').toLowerCase()];
-          var key = (c && (c.x || c.name) || String(r.name)).toLowerCase();
-          return { key: key, id: r.id || null, name: r.name, handle: c && c.x ? c.x : null, position: r.position, delta: r.delta || 0 };
+        if (g !== gen.official) return;
+        var rows = (j && Array.isArray(j.rows) ? j.rows : []).filter(function (r) { return r && Number(r.position) > 0 && r.name; }).map(function (r) {
+          var name = String(r.name), c = byName[name.toLowerCase()];
+          var key = (c && (c.x || c.name) || name).toLowerCase();
+          return { key: key, id: /^[\w-]{1,64}$/.test(r.id || '') ? r.id : null, name: name, handle: c && c.x ? c.x : null,
+            position: Math.round(Number(r.position)), delta: Math.round(num(r.delta)) };
         }).sort(function (a, b) { return a.position - b.position; });
         if (!rows.length) throw new Error('the leaderboard is empty');
         state.official = { asOf: j.asOf || j.capturedAt || '', rows: rows };
         rebuild();
       })
-      .catch(function (e) { state.officialError = e.message; rebuild(); });
+      .catch(function (e) { if (g !== gen.official) return; state.officialError = e.message; rebuild(); });
   }
 
   // One row per creator on the official leaderboard:
@@ -136,7 +170,7 @@
       var x = s ? (s.stats || []).filter(function (p) { return p.platform === 'x'; })[0] : null;
       var yt = s ? (s.stats || []).filter(function (p) { return p.platform === 'youtube'; })[0] : null;
       return {
-        key: r.key, name: r.name, handle: r.handle || (s && s.handle) || r.name,
+        key: r.key, name: r.name, handle: r.handle || (s && s.handle) || r.name, hasX: !!(r.handle || (s && s.handle)),
         avatar: r.id ? 'https://leaderboard.motion.game/pfp/' + encodeURIComponent(r.id) + '.jpg' : null,
         position: r.position, delta: r.delta,
         stars: mineStars(r.key) || (s && s.stars != null ? s.stars : null), estStars: est, predictedStars: est,
@@ -168,11 +202,15 @@
     list.forEach(function (c) { onBoard[c.key] = true; });
     var extra = (state.stats ? state.stats.creators : []).filter(function (c) { return !onBoard[c.key]; })
       .map(function (c) { return c.handle; });
-    return { list: list, extra: extra, N: N, lock: lock, baseT: base ? base.t : null, sinceLock: !!(base && Date.parse(base.t) <= lock.getTime()) };
+    // "at lock" only if the base snapshot is within 8 hours before the lock (snapshots come every 4 hours)
+    var baseAt = base ? Date.parse(base.t) : null;
+    return { list: list, extra: extra, N: N, lock: lock, baseT: base ? base.t : null, sinceLock: !!(base && baseAt <= lock.getTime() && lock.getTime() - baseAt <= 8 * 3600e3) };
   }
 
   function rebuild() {
+    stabCache = {};
     state.board = buildBoard();
+    renderHow();
     renderAll();
     if (cpick) cpick.refresh();
   }
@@ -182,14 +220,17 @@
     var el = $('data-status'), o = state.official;
     el.classList.toggle('is-demo', !o);
     if (!o) {
-      el.textContent = state.officialError ? 'Official leaderboard unavailable right now' : 'Loading the official leaderboard…';
+      el.innerHTML = state.officialError
+        ? 'Official leaderboard unavailable right now <button type="button" class="status-refresh" id="btn-refresh">Try again</button>'
+        : 'Loading the official leaderboard…';
       return;
     }
     var stats = state.stats
       ? 'Social stats from X' + (state.stats.meta && /youtube/i.test(state.stats.meta.platform || '') ? ' and YouTube' : '') + ' · ' +
         state.stats.meta.dateFrom + ' → ' + state.stats.meta.dateTo
       : state.statsError ? 'Social stats unavailable right now' : 'Loading social stats…';
-    el.innerHTML = esc('Creator ranks · updated ' + fTime(o.asOf) + ' · ' + o.rows.length + ' creators · ' + stats) +
+    var stale = state.officialError || (state.stats && state.statsError) ? ' · couldn’t refresh just now, showing the last data' : '';
+    el.innerHTML = esc('Creator ranks · updated ' + fTime(o.asOf) + ' · ' + o.rows.length + ' creators · ' + stats + stale) +
       ' <button type="button" class="status-refresh" id="btn-refresh">Refresh</button>';
   }
   function refreshAll() {
@@ -205,8 +246,15 @@
     ['lineup-section', 'ranking-section'].forEach(function (id) { $(id).hidden = !has && !!state.officialError; });
     if (has) { renderLineup(); renderMyLineup(); renderMovers(); renderRanking(); }
     if (document.body.getAttribute('data-tab') === 'insights') renderInsights();
-    if (has && detailKey && $('detail').open) { var st = $('detail').scrollTop; openDetail(detailKey, true); $('detail').scrollTop = st; } // stats or history arrived
-    if (pendingCreator && has) { var pc = pendingCreator.toLowerCase(), hit = state.board.list.filter(function (c) { return c.handle.toLowerCase() === pc; })[0]; if (hit) { pendingCreator = null; openDetail(hit.key); } }
+    if (has && detailKey && $('detail').open) { // stats or history arrived
+      var st = $('detail').scrollTop, hadFocus = $('detail').contains(document.activeElement);
+      openDetail(detailKey, true); $('detail').scrollTop = st;
+      if (hadFocus) $('detail').querySelector('.modal-x').focus();
+    }
+    if (pendingCreator && has) {
+      var pc = pendingCreator.toLowerCase(), hit = state.board.list.filter(function (c) { return c.handle.toLowerCase() === pc || c.key === pc; })[0];
+      if (hit) { pendingCreator = null; openDetail(hit.key); }
+    }
   }
 
   function chipsFor(c) {
@@ -338,6 +386,7 @@
       return;
     }
     var withMove = b.list.filter(function (c) { return c.weekChange != null; });
+    if (!withMove.length) { el.innerHTML = '<div class="movers-empty muted">Not enough rank history to compare yet. Movers show up after the next leaderboard update.</div>'; return; }
     var since = b.sinceLock ? 'since Monday’s lock (' + esc(fTime(b.lock.toISOString())) + ')' : 'since ' + esc(fTime(b.baseT)) + ', when tracking started';
     var up = withMove.filter(function (c) { return c.weekChange > 0; }).sort(function (x, y) { return y.weekChange - x.weekChange || x.position - y.position; }).slice(0, 5);
     var down = withMove.filter(function (c) { return c.weekChange < 0; }).sort(function (x, y) { return x.weekChange - y.weekChange || x.position - y.position; }).slice(0, 5);
@@ -353,14 +402,31 @@
   }
 
   /* ---------- my lineup this week ---------- */
-  try { state.lineup = (JSON.parse(lsGet(LS_LINEUP) || '[]') || []).slice(0, 5); } catch (e) { state.lineup = []; }
-  function saveLineup() { lsSet(LS_LINEUP, JSON.stringify(state.lineup)); renderMyLineup(); }
+  // Saved as { lock, picks }: the week it was picked for (older versions saved just the picks).
+  try {
+    var savedLu = JSON.parse(lsGet(LS_LINEUP) || '[]');
+    var luPicks = Array.isArray(savedLu) ? savedLu : savedLu && Array.isArray(savedLu.picks) ? savedLu.picks : [];
+    state.lineup = luPicks.filter(function (k) { return typeof k === 'string'; }).slice(0, 5);
+    state.lineupLock = savedLu && !Array.isArray(savedLu) && typeof savedLu.lock === 'string' ? savedLu.lock : null;
+  } catch (e) { state.lineup = []; state.lineupLock = null; }
+  function saveLineup() {
+    state.lineupLock = lastLock(new Date()).toISOString();
+    lsSet(LS_LINEUP, JSON.stringify({ lock: state.lineupLock, picks: state.lineup }));
+    renderMyLineup();
+  }
   function renderMyLineup() {
     var el = $('mylineup'), b = state.board;
     if (!el || !b) return;
     var by = {};
     b.list.forEach(function (c) { by[c.key] = c; });
     var picks = state.lineup.map(function (k) { return by[k]; }).filter(Boolean);
+    var gone = state.lineup.filter(function (k) { return !by[k]; });
+    var oldWeek = picks.length && state.lineupLock && Date.parse(state.lineupLock) < b.lock.getTime() - 3600e3;
+    var notes = (oldWeek ? '<p class="ml-note">These are your picks for the week of ' + esc(new Date(state.lineupLock).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })) +
+        '. Pick this week’s five, or <button type="button" class="link-btn" id="ml-keep">keep them for this week</button>.</p>' : '') +
+      (gone.length ? '<p class="ml-note">Not on the leaderboard anymore: ' + gone.map(function (k) {
+        return '@' + esc(k) + ' <button type="button" class="link-btn" data-ml-remove="' + esc(k) + '">remove</button>';
+      }).join(', ') + '</p>' : '');
     var boost = function (c) { var m = myCards[c.key]; return m && m.r ? state.cfg.cardBoosts[m.r] || 1 : 1; };
     var valueAt = function (pos) { return Math.round(1000 * (b.N - pos + 1) / b.N); };
     var head = '<div class="ml-head"><h3>My lineup this week</h3>' +
@@ -368,23 +434,25 @@
       '<button type="button" class="btn btn-ghost" id="ml-edit"><span>Pick creators</span></button>' +
       (picks.length ? '<button type="button" class="btn btn-ghost" id="ml-clear"><span>Clear</span></button>' : '') + '</span></div>';
     if (!picks.length) {
-      el.innerHTML = '<div class="card-cut ml-box">' + head + '<p class="muted">Track the five you submitted: see how their official ranks move through the week, from Monday’s lock to Friday’s results. Saved in this browser.</p></div>';
+      el.innerHTML = '<div class="card-cut ml-box">' + head + notes + '<p class="muted">Track the five you submitted: see how their official ranks move through the week, from Monday’s lock to Friday’s results. Saved in this browser.</p></div>';
       return;
     }
-    var hasBase = picks.some(function (c) { return c.basePos; });
-    var nowVal = 0, baseVal = 0;
+    // the change compares the same cards: only those with a rank at the base snapshot
+    var withBase = picks.filter(function (c) { return c.basePos; }), hasBase = withBase.length > 0;
+    var nowVal = 0, baseVal = 0, nowSame = 0;
     var rows = picks.map(function (c) {
       var bst = boost(c);
       nowVal += valueAt(c.position) * bst;
-      if (c.basePos) baseVal += valueAt(c.basePos) * bst;
-      return '<tr data-key="' + esc(c.key) + '"><td class="ml-who">' + avatarHtml(c, 26) + '@' + esc(c.handle) + '</td><td>' + starsText(c) + '</td><td>' + (c.basePos ? '#' + c.basePos : '—') + '</td><td><b>#' + c.position + '</b></td><td>' +
+      if (c.basePos) { baseVal += valueAt(c.basePos) * bst; nowSame += valueAt(c.position) * bst; }
+      return '<tr data-key="' + esc(c.key) + '"><td class="ml-who"><button type="button" class="tbl-who" data-key="' + esc(c.key) + '">' + avatarHtml(c, 26) + '@' + esc(c.handle) + '</button></td><td>' + starsText(c) + '</td><td>' + (c.basePos ? '#' + c.basePos : '—') + '</td><td><b>#' + c.position + '</b></td><td>' +
         (c.weekChange != null ? moveText(c.weekChange) : '—') + '</td><td>' + sparkline(c, 80, 20) + '</td></tr>';
     }).join('');
     var label = b.sinceLock ? 'At lock' : (b.baseT ? 'Since ' + esc(fTime(b.baseT)) : 'At lock');
-    el.innerHTML = '<div class="card-cut ml-box">' + head +
+    el.innerHTML = '<div class="card-cut ml-box">' + head + notes +
       '<div class="tbl-wrap"><table class="tbl ml-tbl"><thead><tr><th>Creator</th><th>Stars</th><th>' + label + '</th><th>Now</th><th>Change</th><th>Trend</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<div class="lineup-total"><span>Deck value now <b>' + fInt(nowVal) + '</b></span>' +
-      (hasBase ? '<span>' + label + ' <b>' + fInt(baseVal) + '</b></span><span>Change <b>' + (nowVal - baseVal >= 0 ? '+' : '−') + fInt(Math.abs(nowVal - baseVal)) + '</b></span>' : '') + '</div>' +
+      (hasBase ? '<span>' + label + ' <b>' + fInt(baseVal) + '</b></span><span>Change <b>' + (nowSame - baseVal >= 0 ? '+' : '−') + fInt(Math.abs(nowSame - baseVal)) + '</b>' +
+        (withBase.length < picks.length ? ' <small class="muted">(' + withBase.length + ' of ' + picks.length + ' cards have history)</small>' : '') + '</span>' : '') + '</div>' +
       (state.history ? '' : '<p class="muted">Rank history is still loading or not collected yet, so changes appear once snapshots exist.</p>') + '</div>';
   }
   function openLineupPicker() {
@@ -422,7 +490,7 @@
   function rankChart(c) {
     var pts = c.series || [];
     if (pts.length < 2) return '<p class="muted">The trend appears after the next leaderboard update (Motion updates about every 4 hours).</p>';
-    var W = 900, H = 240, L = 46, R = 16, T = 16, B = 34;
+    var narrow = window.innerWidth < 700, W = narrow ? 560 : 900, H = narrow ? 300 : 240, L = narrow ? 54 : 46, R = 16, T = 16, B = 34;
     var t0 = Date.parse(pts[0].t), t1 = Date.parse(pts[pts.length - 1].t), span = Math.max(1, t1 - t0);
     var ps = pts.map(function (x) { return x.p; }), best = Math.min.apply(null, ps), worst = Math.max.apply(null, ps);
     var lo = Math.max(1, best - 2), hi = worst + 2;
@@ -458,7 +526,7 @@
   function dailyChart(s) {
     var days = (s && s.daily) || [];
     if (days.length < 2) return '';
-    var W = 900, H = 200, L = 8, R = 8, T = 22, B = 30, n = days.length;
+    var narrow = window.innerWidth < 700, W = narrow ? 560 : 900, H = narrow ? 250 : 200, L = 8, R = 8, T = 22, B = 30, n = days.length;
     var max = Math.max.apply(null, days.map(function (d) { return d[2] || 0; }).concat([1]));
     var bw = (W - L - R) / n;
     var bars = days.map(function (d, i) {
@@ -571,7 +639,7 @@
       var subs = STAT_COLS.map(function (s) {
         var v = s.get(c), w = v != null && max[s.key] > 0 ? v / max[s.key] * 100 : 0;
         return '<div class="sub"><div class="sub-top"><span>' + s.short + '</span>' + (v == null ? '—' : s.fmt(v, c)) + '</div>' +
-          '<div class="bar"><i style="width:' + Math.max(2, w) + '%"></i></div></div>';
+          '<div class="bar"><i style="width:' + (v > 0 ? Math.max(2, w) : 0) + '%"></i></div></div>';
       }).join('');
       return '<button type="button" class="rank-row t' + tierOf(c) + (c.position <= 3 ? ' top3' : '') + '" data-key="' + esc(c.key) + '">' +
         '<span class="r-rank">' + (c.position < 10 ? '0' : '') + c.position + '</span>' +
@@ -597,7 +665,7 @@
       '<div class="card-cut how-card"><h3>Stars <em>≈</em></h3><p>Until real stars from the game are added, each creator’s stars are estimated from their rank with Fantasy Top’s published split: ' + esc(bands) + '. Real stars in the game can differ.</p></div>' +
       '<div class="card-cut how-card"><h3>Build a <em>deck</em></h3><p>Five different creators whose stars fit under your cap. Each creator is worth their rank (#1 = 1,000, the last ≈ ' + (state.board ? fInt(1000 / state.board.N) : '13') + ') × your card’s boost:</p><ul>' +
         RARITIES.map(function (r) { return '<li>' + rarityLabel(r) + ': ' + cfg.cardBoosts[r] + '×</li>'; }).join('') + '</ul>' +
-        '<p>Every combination is checked, so it’s the best draft for that cap by rank-based value. Real stars and the tournament’s boost limits still need checking in the game.</p></div>' +
+        '<p>The search is exact, so it’s the best draft for that cap by rank-based value. Real stars and the tournament’s boost limits still need checking in the game.</p></div>' +
       '<div class="card-cut how-card"><h3>Rank <em>history</em></h3><p>Motion Scout saves every snapshot of the official leaderboard (about every 4 hours) from ' + (state.history && state.history.snapshots.length ? esc(fTime(state.history.snapshots[0].t)) : 'now on') + '. <b>Movers</b> compares each creator with their rank at Monday’s 7 AM ET lineup lock; <b>My lineup this week</b> does the same for your five.</p></div>' +
       '<div class="card-cut how-card"><h3>Social <em>stats</em></h3><p>Where available: posts, active days, views and followers over the last ' + cfg.windowDays + ' days on X (original posts and quotes, no replies or reposts). YouTube is being added. Collected every day. They’re context for your picks: they don’t change the order.</p></div>' +
       '<div class="card-cut how-card how-wide"><h3>Game <em>rules</em></h3><p>From <a href="https://docs.motion.game" target="_blank" rel="noopener">docs.motion.game</a>: Motion scores creators on X, Instagram, TikTok and YouTube during each Monday-to-Friday tournament; the top creator gets 1,000 pts; stars (1–8) reflect each creator’s performance relative to others over the past 14 days and count toward each tournament’s star cap; Lineup Score = sum of each creator’s Motion Score × card boost; submitted lineups are ranked on the Tournament Leaderboard in Arena. Motion Scout is a community planning tool, not the game’s score.</p></div>';
@@ -613,8 +681,8 @@
     var since = b.sinceLock ? 'Since Monday’s lock' : 'Since tracking started';
     var head = '<div class="dh">' + avatarHtml(c, 72) +
       '<div class="dh-who"><h2 id="detail-title">' + esc(c.name) + '</h2>' +
-        '<a class="dh-handle" href="https://x.com/' + encodeURIComponent(c.handle) + '" target="_blank" rel="noopener">@' + esc(c.handle) + '</a>' +
-        '<button type="button" class="link-btn dh-copy" data-copy-link="' + esc(c.handle) + '">Copy link to this page</button>' +
+        (c.hasX ? '<a class="dh-handle" href="https://x.com/' + encodeURIComponent(c.handle) + '" target="_blank" rel="noopener">@' + esc(c.handle) + '</a>' : '<span class="dh-handle muted">No X account tracked</span>') +
+        '<button type="button" class="link-btn dh-copy" data-copy-link="' + esc(pageId(c)) + '">Copy link to this page</button>' +
         '<div class="chips">' + chipsFor(c) + (c.starsFrom === 'yours' ? '<span class="chip">your card</span>' : '') + '</div></div>' +
       '<div class="dh-rank"><b>#' + c.position + '</b><small>of ' + b.N + '</small></div>' +
       '<button type="button" class="modal-x" data-close aria-label="Close">✕</button></div>';
@@ -652,9 +720,13 @@
     if (!dlg.open) dlg.showModal();
     if (!keepScroll) dlg.scrollTop = 0;
     // a link to this creator's page: #c/<handle>
-    if (location.hash !== '#c/' + c.handle) history.replaceState(null, '', '#c/' + c.handle);
+    if (location.hash !== '#c/' + encodeURIComponent(pageId(c))) history.replaceState(null, '', '#c/' + encodeURIComponent(pageId(c)));
   }
-  function creatorLink(handle) { return location.origin + location.pathname + '#c/' + handle; }
+  function pageId(c) { return c.hasX ? c.handle : c.key; }
+  function creatorLink(id) {
+    var base = location.protocol === 'file:' ? 'https://motion-scout.vercel.app/' : location.origin + location.pathname;
+    return base + '#c/' + encodeURIComponent(id);
+  }
   // Average posts a day / week, tournament days vs weekends, and the busiest weekdays.
   function fAvg(n) { return n == null ? '—' : n < 10 ? n.toFixed(1).replace(/\.0$/, '') : fInt(n); }
   function rhythmHtml(x) {
@@ -677,7 +749,7 @@
       tile('Sat–Sun', fAvg(perWe == null ? null : perWe * 2), (perWe == null ? '—' : fAvg(perWe)) + ' a day on weekends') +
       tile('Best day', best ? fK(best[2]) : '—', best ? esc(dayLabel(best[0])) + ' · ' + best[1] + ' post' + (best[1] === 1 ? '' : 's') : 'no posts yet') +
     '</div>';
-    var W = 900, H = 190, L = 8, R = 8, T = 24, B = 30, bw = (W - L - R) / 7;
+    var narrow = window.innerWidth < 700, W = narrow ? 560 : 900, H = narrow ? 240 : 190, L = 8, R = 8, T = 30, B = 30, bw = (W - L - R) / 7;
     var avg = wk.map(function (g) { return g.n ? g.posts / g.n : 0; });
     var max = Math.max.apply(null, avg.concat([0.1]));
     var bars = avg.map(function (v, i) {
@@ -701,10 +773,12 @@
     if (!state.history || c.hi == null) return '';
     var rows = stabRows(7).rows, me = rows.filter(function (r) { return r.c.key === c.key; })[0];
     if (!me) return '';
-    var lower = rows.filter(function (r) { return r.sd < me.sd; }).length, pct = rows.length > 1 ? lower / (rows.length - 1) : 0;
+    var others = rows.length - 1;
+    var lower = rows.filter(function (r) { return r.sd < me.sd; }).length, higher = rows.filter(function (r) { return r.sd > me.sd; }).length;
+    var pct = others ? (lower + (others - lower - higher) / 2) / others : 0.5;
     var label = pct < 1 / 3 ? 'Steady' : pct > 2 / 3 ? 'Swingy' : 'Average swing';
-    return tile('Rank range · 7 days', me.best === me.worst ? '#' + me.best : '#' + me.best + '–' + me.worst,
-      label + ' (±' + me.sd.toFixed(1) + ' places, ' + (pct < 0.5 ? 'steadier than ' + Math.round((1 - pct) * 100) : 'swingier than ' + Math.round(pct * 100)) + '% of creators)');
+    var vs = !others ? '' : higher >= lower ? ', steadier than ' + Math.round(higher / others * 100) + '% of creators' : ', swingier than ' + Math.round(lower / others * 100) + '% of creators';
+    return tile('Rank range · 7 days', me.best === me.worst ? '#' + me.best : '#' + me.best + '–' + me.worst, label + ' (±' + me.sd.toFixed(1) + ' places' + vs + ')');
   }
 
   /* ---------- insights: Week in Motion, steady vs swingy, X activity vs rank ---------- */
@@ -756,7 +830,7 @@
     var h = state.history;
     if (!h || !h.snapshots.length) return [];
     var first = Date.parse(h.snapshots[0].t), starts = [], L = lastLock(new Date()).getTime();
-    for (var i = 0; i < 52; i++) { starts.push(L); if (L <= first) break; L = lastLock(new Date(L - 60000)).getTime(); }
+    for (var i = 0; i < 8; i++) { starts.push(L); if (L <= first) break; L = lastLock(new Date(L - 60000)).getTime(); }
     return starts.map(function (s, i) { return { start: s, end: i ? starts[i - 1] : null }; });
   }
   function weekStats(w) {
@@ -779,7 +853,7 @@
         best: Math.min.apply(null, ps), worst: Math.max.apply(null, ps),
         atTop: ps.filter(function (p) { return p === 1; }).length,
         posts: xd.length ? sum(xd, function (d) { return d[1]; }) : null,
-        views: xd.length ? sum(xd, function (d) { return d[2] || 0; }) : null, top: top
+        views: xd.length ? sum(xd, function (d) { return d[2] || 0; }) : null, top: top, xdays: xd.length
       };
     });
     return { w: w, s0: s0, s1: s1, late: late, n: within.length, rows: rows, xDates: dates.filter(function (d) { return xDates[d]; }) };
@@ -857,7 +931,7 @@
         wkBox('Falling', 'down', down.map(function (r) { return wkRow(r, '#' + r.a + ' → #' + r.b, '▼' + (-r.change), 'down'); })) +
         wkBox('Held their place · top 30', '', steady.map(function (r) { return wkRow(r, r.best === r.worst ? 'never moved' : 'between #' + r.best + ' and #' + r.worst, '#' + r.b); })) +
         wkBox('Most views on X', '', views.map(function (r) { return wkRow(r, fAvg(r.posts) + ' posts', fK(r.views)); })) +
-        wkBox('Posted the most', '', posts.map(function (r) { return wkRow(r, fAvg(r.posts / xd) + ' a day', fInt(r.posts)); })) +
+        wkBox('Posted the most', '', posts.map(function (r) { return wkRow(r, fAvg(r.posts / r.xdays) + ' a day', fInt(r.posts)); })) +
         wkBox('Biggest single day', '', days.map(function (r) { return wkRow(r, esc(dayLabel(r.top[0])) + ' · ' + r.top[1] + ' post' + (r.top[1] === 1 ? '' : 's'), fK(r.top[2])); })) +
         memeBox +
       '</div>' +
@@ -865,7 +939,12 @@
   }
 
   // Rank spread over the last `days` days of snapshots (standard deviation in places).
+  var stabCache = {};
   function stabRows(days) {
+    if (stabCache[days]) return stabCache[days];
+    return (stabCache[days] = stabRowsRaw(days));
+  }
+  function stabRowsRaw(days) {
     var s = state.history.snapshots, last = Date.parse(s[s.length - 1].t);
     var win = snapsBetween(last - days * DAY, last);
     var rows = state.board.list.filter(function (c) { return c.hi != null; }).map(function (c) {
@@ -887,8 +966,8 @@
     };
     var steady = rows.slice().sort(function (a, b) { return a.sd - b.sd || a.c.position - b.c.position; }).slice(0, 6);
     var swingy = rows.slice().sort(function (a, b) { return b.sd - a.sd || a.c.position - b.c.position; }).slice(0, 6);
-    el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>Steady or swingy</h3><p class="muted">How far each creator’s rank moved over the last 7 days (' + R.win.length + ' updates since ' + esc(shortTime(R.win[0].t)) +
-      '). Steady cards keep their value through the week; swingy ones can win you a lot or cost you. ± is the typical distance from their average rank, in places.</p></div>' +
+    el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>Steady or swingy</h3><p class="muted">How far each creator’s official rank moved over the last 7 days (' + R.win.length + ' updates since ' + esc(shortTime(R.win[0].t)) +
+      '). A steady rank is easier to plan around; a swingy one can climb or drop a lot within a week. ± is the typical distance from their average rank, in places.</p></div>' +
       '<div class="seg" role="group" aria-label="Which creators"><button type="button" class="seg-btn' + (ins.stabTop ? ' active' : '') + '" data-stab="top" aria-pressed="' + ins.stabTop + '">Top 25</button>' +
       '<button type="button" class="seg-btn' + (ins.stabTop ? '' : ' active') + '" data-stab="all" aria-pressed="' + !ins.stabTop + '">Everyone</button></div></div>' +
       '<div class="movers-cols"><div><h4 class="st-h steady">Steadiest</h4>' + steady.map(item).join('') + '</div>' +
@@ -924,6 +1003,13 @@
     var D = xrData();
     if (!D || D.rows.length < 10) { el.innerHTML = ''; return; }
     var M = XR[ins.xr], rows = D.rows.filter(function (r) { return M.get(r) != null; });
+    var segXr = '<div class="seg" role="group" aria-label="Measure">' + Object.keys(XR).map(function (k) {
+      return '<button type="button" class="seg-btn' + (ins.xr === k ? ' active' : '') + '" data-xr="' + k + '" aria-pressed="' + (ins.xr === k) + '">' + XR[k].label + '</button>';
+    }).join('') + '</div>';
+    if (rows.length < 10) {
+      el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>X activity and rank change</h3></div>' + segXr + '</div><p class="muted">Not enough creators with posts over these days to compare ' + esc(M.axis) + ' yet.</p></div>';
+      return;
+    }
     var lg = function (v) { return Math.log(v + 1) / Math.LN10; };
     var xs = rows.map(function (r) { return lg(M.get(r)); }), ch = rows.map(function (r) { return r.change; });
     var rho = spearman(rows.map(M.get), ch);
@@ -966,11 +1052,9 @@
     var dir = rho > 0 ? 'more ' + M.axis + ' went with climbing' : 'more ' + M.axis + ' went with falling';
     var verdict = '<p class="xr-verdict"><b>' + strength + '</b>' + (a < 0.15 ? ': over these days, ' + esc(M.axis) + ' said little about who climbed.' : ': over these days, ' + esc(dir) + '.') +
       ' <span class="muted">(Spearman ρ = ' + (rho == null ? '—' : rho.toFixed(2)) + ', ' + rows.length + ' creators)</span></p>';
-    el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>Does X move the rank?</h3><p class="muted">Each dot is a creator: their ' + esc(M.axis) + ' from ' + esc(dayLabel(D.dates[0])) + ' to ' + esc(dayLabel(D.dates[D.dates.length - 1])) +
-      ' against how many places they moved over the same days (rank at ' + esc(shortTime(D.s0.t)) + ' → ' + esc(shortTime(D.s1.t)) + '). Higher = climbed.</p></div>' +
-      '<div class="seg" role="group" aria-label="Measure">' + Object.keys(XR).map(function (k) {
-        return '<button type="button" class="seg-btn' + (ins.xr === k ? ' active' : '') + '" data-xr="' + k + '" aria-pressed="' + (ins.xr === k) + '">' + XR[k].label + '</button>';
-      }).join('') + '</div></div>' + verdict +
+    el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>X activity and rank change</h3><p class="muted">Each dot is a creator: their ' + esc(M.axis) + ' from ' + esc(dayLabel(D.dates[0])) + ' to ' + esc(dayLabel(D.dates[D.dates.length - 1])) +
+      ' against how many places they moved over the same days (rank at ' + esc(shortTime(D.s0.t)) + ' → ' + esc(shortTime(D.s1.t)) + '). Higher = climbed. It shows how the two went together, not what caused what.</p></div>' +
+      segXr + '</div>' + verdict +
       chartWrap(tips, W, svg, true) +
       '<div class="xr-thirds"><div><small>Most ' + esc(M.axis) + ' (top third)</small><b class="' + (hiC > 0 ? 'up' : hiC < 0 ? 'down' : '') + '">' + f1(hiC) + '</b><span>places on average</span></div>' +
       '<div><small>Least ' + esc(M.axis) + ' (bottom third)</small><b class="' + (loC > 0 ? 'up' : loC < 0 ? 'down' : '') + '">' + f1(loC) + '</b><span>places on average</span></div></div>' +
@@ -1006,7 +1090,7 @@
       return '<th' + (on ? ' aria-sort="' + (dir < 0 ? 'descending' : 'ascending') + '"' : '') + '><button type="button" class="act-sort' + (on ? ' active' : '') + '" data-act="' + a.key + '"' + (a.title ? ' title="' + a.title + '"' : '') + '>' + a.label + (on ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</button></th>';
     }).join('');
     var body = shown.map(function (r) {
-      return '<tr data-key="' + esc(r.c.key) + '"><td><span class="act-who">' + avatarHtml(r.c, 26) + '<b>@' + esc(r.c.handle) + '</b></span></td>' +
+      return '<tr data-key="' + esc(r.c.key) + '"><td><button type="button" class="tbl-who act-who" data-key="' + esc(r.c.key) + '">' + avatarHtml(r.c, 26) + '<b>@' + esc(r.c.handle) + '</b></button></td>' +
         ACT.slice(1).map(function (a) { return '<td' + (a.key === ins.act.key ? ' class="act-on"' : '') + '>' + a.fmt(a.get(r)) + '</td>'; }).join('') + '</tr>';
     }).join('');
     el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>Who posts the most</h3><p class="muted">Posts a day, average reach (views per post) and views a day on X over the last ' + days +
@@ -1018,7 +1102,7 @@
   // Gap = activity place - rank place: positive = ranks higher than their posting would suggest.
   var EFF = [
     { key: 'handle', label: 'Creator' },
-    { key: 'rank', label: 'Avg rank · 7d', get: function (r) { return r.rank; }, fmt: function (v, r) { return '#' + r.rankPlace; } },
+    { key: 'rank', label: 'Avg rank · 7d', get: function (r) { return r.rank; }, fmt: function (v, r) { return '#' + Math.round(v) + (r.rankPlace !== Math.round(v) ? ' <small>' + r.rankPlace + ' here</small>' : ''); } },
     { key: 'ppd', label: 'Posts a day', get: function (r) { return r.ppd; }, fmt: function (v, r) { return fAvg(v) + ' <small>#' + r.pPlace + '</small>'; } },
     { key: 'gp', label: 'Gap · posts', title: 'Place by posts a day minus place on the leaderboard', gap: 1, get: function (r) { return r.pPlace - r.rankPlace; } },
     { key: 'vpd', label: 'Views a day', get: function (r) { return r.vpd; }, fmt: function (v, r) { return fK(v) + ' <small>#' + r.vPlace + '</small>'; } },
@@ -1054,7 +1138,7 @@
       return '<th' + (on ? ' aria-sort="' + (dir < 0 ? 'descending' : 'ascending') + '"' : '') + (a.gap ? ' class="eff-gap"' : '') + '><button type="button" class="act-sort' + (on ? ' active' : '') + '" data-eff="' + a.key + '"' + (a.title ? ' title="' + a.title + '"' : '') + '>' + a.label + (on ? (dir < 0 ? ' ▼' : ' ▲') : '') + '</button></th>';
     }).join('');
     var body = shown.map(function (r) {
-      return '<tr data-key="' + esc(r.c.key) + '"><td><span class="act-who">' + avatarHtml(r.c, 26) + '<b>@' + esc(r.c.handle) + '</b></span></td>' +
+      return '<tr data-key="' + esc(r.c.key) + '"><td><button type="button" class="tbl-who act-who" data-key="' + esc(r.c.key) + '">' + avatarHtml(r.c, 26) + '<b>@' + esc(r.c.handle) + '</b></button></td>' +
         EFF.slice(1).map(function (a) { return '<td class="' + (a.gap ? 'eff-gap' : '') + (a.key === ins.eff.key ? ' act-on' : '') + '">' + (a.gap ? fGap(a.get(r)) : a.fmt(a.get(r), r)) + '</td>'; }).join('') + '</tr>';
     }).join('');
     // the two ends, in words
@@ -1062,7 +1146,7 @@
     var hi = byGap.slice(0, 3), lo = byGap.slice(-3).reverse();
     var names = function (a) { return a.map(function (r) { return '@' + esc(r.c.handle); }).join(', '); };
     el.innerHTML = '<div class="ins-card card-cut"><div class="ins-head"><div><h3>Rank vs activity</h3><p class="muted">Each creator’s place among ' + rows.length +
-      ' creators by posts, views and interactions a day on X, next to their place on Motion’s board (average rank over 7 days). The gap is the difference in places: <b class="up-t">▲</b> means they rank higher than that activity would suggest, <b class="down-t">▼</b> lower. Click a column to sort.</p></div></div>' +
+      ' creators by posts, views and interactions a day on X, next to their place on Motion’s board (average rank over 7 days). Gaps compare places among these ' + rows.length + ' creators: <b class="up-t">▲</b> means they rank higher than that activity would suggest, <b class="down-t">▼</b> lower. Click a column to sort.</p></div></div>' +
       '<div class="eff-ends"><div><small>Most rank for their posts</small><b>' + names(hi) + '</b></div><div><small>Post the most for their rank</small><b>' + names(lo) + '</b></div></div>' +
       '<div class="tbl-wrap"><table class="tbl act-tbl eff-tbl"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
       (rows.length > 20 ? '<div class="act-more"><button type="button" class="btn btn-ghost" data-eff-all><span>' + (ins.effAll ? 'Show top 20' : 'Show all ' + rows.length) + '</span></button></div>' : '') +
@@ -1135,7 +1219,11 @@
   // #play (How to play) · #build (Build a deck) · #leaderboard · #about. Old section links still work.
   var TABS = ['play', 'build', 'leaderboard', 'insights', 'memes', 'about'];
   var pendingCreator = null; // #c/<handle>: open that creator's page once the leaderboard loads
-  function creatorFromHash() { var m = (location.hash || '').match(/^#c\/(\w{1,30})$/); return m ? m[1] : null; }
+  function creatorFromHash() {
+    var m = (location.hash || '').match(/^#c\/([^\/]{1,80})$/);
+    if (!m) return null;
+    try { return decodeURIComponent(m[1]); } catch (e) { return null; }
+  }
   var OLD_HASH = { howto: 'play', top: 'play', 'lineup-section': 'build', 'check-section': 'build', deck: 'build',
     'ranking-section': 'leaderboard', roadmap: 'about', how: 'about' };
   var LS_TAB = 'motionScout.tab.v1';
@@ -1152,6 +1240,7 @@
       var on = a.getAttribute('data-tab') === tab;
       a.classList.toggle('active', on);
       if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+      if (on && a.parentNode.scrollWidth > a.parentNode.clientWidth) a.parentNode.scrollLeft = a.offsetLeft - (a.parentNode.clientWidth - a.offsetWidth) / 2;
     });
     document.body.setAttribute('data-tab', tab);
     lsSet(LS_TAB, tab);
@@ -1263,7 +1352,9 @@
     }).then(function (node) {
       el.classList.add(node ? 'is-embedded' : 'is-gone');
       var wait = el.querySelector('.meme-fallback .muted'); if (wait && !node) wait.textContent = 'This post isn’t available on X anymore.';
-    }).catch(function () { /* embeds blocked in this browser: the text version stays */ });
+    }).catch(function () { // embeds blocked in this browser: the text version stays
+      var wait = el.querySelector('.meme-fallback .muted'); if (wait) wait.textContent = 'The post can’t be shown here. Open it on X instead.';
+    });
   }
   function memeAgo(iso) {
     var t = Date.parse(iso), s = (Date.now() - t) / 1000;
@@ -1323,7 +1414,7 @@
   // Meme of the week: revealed by the server every Sunday (likes before the reveal only).
   function renderMotw() {
     var box = $('motw');
-    if (!memes.list) { box.innerHTML = '<div class="motw-head"><span class="motw-tag">Meme of the week</span></div><p class="motw-empty">Loading…</p>'; memes.motwId = null; return; }
+    if (!memes.list) { box.innerHTML = '<div class="motw-head"><span class="motw-tag">Meme of the week</span></div><p class="motw-empty">' + (memes.error ? 'Couldn’t load memes right now.' : 'Loading…') + '</p>'; memes.motwId = null; return; }
     var w = (memes.winners || []).filter(function (x) { return memeById(x.id); })[0] || null;
     var next = memes.nextReveal ? '<p class="motw-next">Next winner: <b>' + esc(fReveal(memes.nextReveal)) + '</b> <span class="muted">(in ' + esc(untilText(memes.nextReveal)) + ')</span></p>' : '';
     if (!w) {
@@ -1390,10 +1481,13 @@
     withTimeout(API.memes(state.cfg), 20000).then(function (r) {
       memes.list = (r.memes || []).filter(function (m) { return /^\d{5,25}$/.test(m.id) && /^\w{1,15}$/.test(m.author); });
       memes.list.forEach(function (m) {
+        m.likes = Math.max(0, Math.round(num(m.likes)));
+        m.mediaRatio = num(m.mediaRatio) || null;
         if (!/^https:\/\/pbs\.twimg\.com\//.test(m.media || '')) m.media = '';
         if (!/^https:\/\/pbs\.twimg\.com\//.test(m.authorPic || '')) m.authorPic = '';
       });
-      memes.winners = r.winners || [];
+      memes.winners = (Array.isArray(r.winners) ? r.winners : []).filter(function (w) { return w && /^\d{5,25}$/.test(w.id); })
+        .map(function (w) { return { id: w.id, likes: Math.max(0, Math.round(num(w.likes))), weekStart: w.weekStart, weekEnd: w.weekEnd }; });
       memes.nextReveal = r.nextReveal || null;
       memes.error = null;
     }).catch(function (e) {
@@ -1532,12 +1626,21 @@
     renderBtn();
     return { reset: function () { val.value = ''; renderBtn(); }, refresh: function () { items = people(); renderBtn(); } };
   })();
+  // A link to a post on X → https://x.com/<user>/status/<id>, or null.
+  function postLink(raw) {
+    var u;
+    try { u = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw); } catch (e) { return null; }
+    if (!/^https?:$/.test(u.protocol) || u.username || u.password || u.port) return null;
+    if (!/^(www\.|mobile\.)?(x|twitter)\.com$/i.test(u.hostname)) return null;
+    var m = u.pathname.match(/^\/(\w{1,15})\/status(?:es)?\/(\d{5,25})(?:\/(?:photo|video)\/\d{1,2})?\/?$/i);
+    return m ? 'https://x.com/' + m[1] + '/status/' + m[2] : null;
+  }
   (function initMemeForm() {
     var sel = $('meme-creator');
     $('meme-form').addEventListener('submit', function (e) {
       e.preventDefault();
-      var url = $('meme-url').value.trim(), st = $('meme-status');
-      if (!/^(https?:\/\/)?(www\.|mobile\.)?(x|twitter)\.com\/\w{1,15}\/status(es)?\/\d{5,25}/i.test(url)) {
+      var url = postLink($('meme-url').value.trim()), st = $('meme-status');
+      if (!url) {
         st.className = 'fb-status err-text'; st.textContent = 'Paste a link to your post on X, like https://x.com/you/status/123…';
         $('meme-url').focus();
         return;
@@ -1602,6 +1705,8 @@
     });
   }
 
+  function refocus(sel) { var el = document.querySelector(sel); if (el) el.focus(); }
+
   /* ---------- events ---------- */
   document.addEventListener('click', function (e) {
     var t = e.target;
@@ -1609,9 +1714,9 @@
     if (closer) { closer.closest('dialog').close(); return; }
     if (t.tagName === 'DIALOG') { t.close(); return; } // click on backdrop
     var wkb = t.closest('[data-wk]');
-    if (wkb) { ins.week = +wkb.dataset.wk; ins.weekPicked = true; renderWeek(); return; }
+    if (wkb) { ins.week = +wkb.dataset.wk; ins.weekPicked = true; renderWeek(); refocus('[data-wk="' + ins.week + '"]'); return; }
     var stb = t.closest('[data-stab]');
-    if (stb) { ins.stabTop = stb.dataset.stab === 'top'; renderStab(); return; }
+    if (stb) { ins.stabTop = stb.dataset.stab === 'top'; renderStab(); refocus('[data-stab="' + stb.dataset.stab + '"]'); return; }
     var ab = t.closest('[data-act]');
     if (ab) {
       var k = ab.dataset.act;
@@ -1620,7 +1725,7 @@
       var again = document.querySelector('[data-act="' + k + '"]'); if (again) again.focus();
       return;
     }
-    if (t.closest('[data-act-all]')) { ins.actAll = !ins.actAll; renderAct(); return; }
+    if (t.closest('[data-act-all]')) { ins.actAll = !ins.actAll; renderAct(); refocus('[data-act-all]'); return; }
     var eb = t.closest('[data-eff]');
     if (eb) {
       var ek = eb.dataset.eff;
@@ -1629,9 +1734,12 @@
       var again2 = document.querySelector('[data-eff="' + ek + '"]'); if (again2) again2.focus();
       return;
     }
-    if (t.closest('[data-eff-all]')) { ins.effAll = !ins.effAll; renderEff(); return; }
+    if (t.closest('[data-eff-all]')) { ins.effAll = !ins.effAll; renderEff(); refocus('[data-eff-all]'); return; }
+    if (t.closest('#ml-keep')) { saveLineup(); return; }
+    var mlr = t.closest('[data-ml-remove]');
+    if (mlr) { state.lineup = state.lineup.filter(function (k) { return k !== mlr.dataset.mlRemove; }); saveLineup(); return; }
     var xrb = t.closest('[data-xr]');
-    if (xrb) { ins.xr = xrb.dataset.xr; renderXr(); return; }
+    if (xrb) { ins.xr = xrb.dataset.xr; renderXr(); refocus('[data-xr="' + ins.xr + '"]'); return; }
     var cl = t.closest('[data-copy-link]');
     if (cl) {
       var link = creatorLink(cl.dataset.copyLink), done = function (ok) { cl.textContent = ok ? 'Link copied' : link; setTimeout(function () { cl.textContent = 'Copy link to this page'; }, 2500); };

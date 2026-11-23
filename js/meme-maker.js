@@ -250,7 +250,11 @@
     }
     draw(false);
     try {
-      c.toBlob(function (blob) { draw(true); cb(blob); }, 'image/png');
+      c.toBlob(function (blob) {
+        draw(true);
+        if (!blob) { alert('This picture can’t be saved from the browser. Try another template.'); return; }
+        cb(blob);
+      }, 'image/png');
     } catch (err) {
       draw(true);
       alert('This picture can’t be saved from the browser. Try another template.');
@@ -327,18 +331,19 @@
       case 'light': case 'dark': st.dark = t.getAttribute('data-mk') === 'dark'; syncOpts(); draw(true); break;
       case 'download': toBlob(download); break;
       case 'share': toBlob(share); break;
-      case 'save': download(st.blob); break;
+      case 'save': if (st.blob) download(st.blob); break;
       case 'intent': {
-        var text = postText();
+        var text = postText(), pic = st.blob;
+        if (!pic) break;
         if (canCopy()) {
-          navigator.clipboard.write([new root.ClipboardItem({ 'image/png': st.blob })]).then(function () {
+          navigator.clipboard.write([new root.ClipboardItem({ 'image/png': pic })]).then(function () {
             status('Picture copied. Paste it into your post on X.', true);
           }, function () {
-            download(st.blob);
+            download(pic);
             status('Couldn’t copy the picture, so it was downloaded. Add it to your post on X.', true);
           });
         } else {
-          download(st.blob);
+          download(pic);
           status('The picture was downloaded. Add it to your post on X.', true);
         }
         root.open('https://x.com/intent/post?text=' + encodeURIComponent(text), '_blank', 'noopener');
