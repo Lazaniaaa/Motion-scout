@@ -81,6 +81,17 @@
     }).sort(function (a, b) { return Date.parse(a.t) - Date.parse(b.t); });
     return h;
   }
+  // The last server answers are kept in this browser so a repeat visit shows them at once while fresh ones load
+  // (the server takes a couple of seconds to answer). Older than a day: not used.
+  var LS_C_STATS = 'motionScout.cache.stats.v1', LS_C_HIST = 'motionScout.cache.history.v1';
+  function cacheGet(k) {
+    try { var o = JSON.parse(lsGet(k) || 'null'); return o && o.at && Date.now() - o.at < 864e5 ? o.d : null; } catch (e) { return null; }
+  }
+  function cachePut(k, d) { lsSet(k, JSON.stringify({ at: Date.now(), d: d })); }
+  function fromCache() {
+    try { var s = cacheGet(LS_C_STATS); if (s && !state.stats) state.stats = cleanStats(s); } catch (e) { /* bad cache: wait for the server */ }
+    try { var h = cacheGet(LS_C_HIST); if (h && !state.history) { h = cleanHistory(h); if (h.snapshots.length) state.history = h; } } catch (e) { /* same */ }
+  }
   // A newer request wins: an answer that arrives after a later Refresh is ignored.
   var gen = { stats: 0, history: 0, official: 0 };
   function loadStats() {
@@ -91,6 +102,7 @@
         if (g !== gen.stats) return;
         if (!res || !res.creators || !res.creators.length) throw new Error((res && res.errors && res.errors[0]) || 'no data yet');
         state.stats = cleanStats(res);
+        cachePut(LS_C_STATS, res);
         rebuild();
       })
       .catch(function (e) { if (g !== gen.stats) return; state.statsError = e.message; rebuild(); });
@@ -106,6 +118,7 @@
         h = cleanHistory(h);
         if (!h.snapshots.length) throw new Error('no snapshots yet');
         state.history = h;
+        cachePut(LS_C_HIST, h);
         rebuild();
       })
       .catch(function (e) { if (g !== gen.history) return; state.historyError = e.message; rebuild(); });
@@ -377,6 +390,7 @@
       '<path d="' + d + '"/><circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="' + (big ? 4 : 2.2) + '"/></svg>';
   }
 
+  var mvPeriod = /[?&]movers=day\b/.test(location.search) ? 'day' : 'week'; // ?movers=day opens on the 24-hour view
   function renderMovers() {
     var el = $('movers'), b = state.board;
     if (!el) return;
@@ -386,16 +400,36 @@
         : '<div class="movers-empty muted">Loading rank history…</div>';
       return;
     }
-    var withMove = b.list.filter(function (c) { return c.weekChange != null; });
-    if (!withMove.length) { el.innerHTML = '<div class="movers-empty muted">Not enough rank history to compare yet. Movers show up after the next leaderboard update.</div>'; return; }
-    var since = b.sinceLock ? 'since Monday’s lock (' + esc(fTime(b.lock.toISOString())) + ')' : 'since ' + esc(fTime(b.baseT)) + ', when tracking started';
-    var up = withMove.filter(function (c) { return c.weekChange > 0; }).sort(function (x, y) { return y.weekChange - x.weekChange || x.position - y.position; }).slice(0, 5);
-    var down = withMove.filter(function (c) { return c.weekChange < 0; }).sort(function (x, y) { return x.weekChange - y.weekChange || x.position - y.position; }).slice(0, 5);
-    var item = function (c) {
-      return '<button type="button" class="mv-item" data-key="' + esc(c.key) + '"><span class="mv-move">' + moveText(c.weekChange) + '</span>' +
-        '<span class="mv-who">' + avatarHtml(c, 28) + '<span>@' + esc(c.handle) + '<small>#' + c.basePos + ' → #' + c.position + '</small></span></span>' + sparkline(c, 70, 20) + '</button>';
+    // Each row: { c, base, ch, pts }. Week = since Monday's lock; day = since the snapshot about 24 hours before the latest one.
+    var snaps = state.history.snapshots, rows, since, nSnaps;
+    if (mvPeriod === 'day') {
+      var lastT = Date.parse(snaps[snaps.length - 1].t), dayBase = snaps[0];
+      for (var k = snaps.length - 1; k >= 0; k--) if (Date.parse(snaps[k].t) <= lastT - 23 * 3600e3) { dayBase = snaps[k]; break; }
+      var dayT = Date.parse(dayBase.t);
+      rows = b.list.filter(function (c) { return c.hi != null && dayBase.p[c.hi]; }).map(function (c) {
+        var p0 = dayBase.p[c.hi];
+        return { c: c, base: p0, ch: p0 - c.position, pts: (c.series || []).filter(function (x) { return Date.parse(x.t) >= dayT; }) };
+      });
+      since = 'last 24 hours (since ' + esc(fTime(dayBase.t)) + ')';
+      nSnaps = snaps.filter(function (s) { return Date.parse(s.t) > dayT; }).length;
+    } else {
+      rows = b.list.filter(function (c) { return c.weekChange != null; }).map(function (c) { return { c: c, base: c.basePos, ch: c.weekChange, pts: c.series }; });
+      since = b.sinceLock ? 'since Monday’s lock (' + esc(fTime(b.lock.toISOString())) + ')' : 'since ' + esc(fTime(b.baseT)) + ', when tracking started';
+      nSnaps = snaps.length;
+    }
+    if (!rows.length) { el.innerHTML = '<div class="movers-empty muted">Not enough rank history to compare yet. Movers show up after the next leaderboard update.</div>'; return; }
+    var up = rows.filter(function (r) { return r.ch > 0; }).sort(function (x, y) { return y.ch - x.ch || x.c.position - y.c.position; }).slice(0, 5);
+    var down = rows.filter(function (r) { return r.ch < 0; }).sort(function (x, y) { return x.ch - y.ch || x.c.position - y.c.position; }).slice(0, 5);
+    var item = function (r) {
+      var c = r.c;
+      return '<button type="button" class="mv-item" data-key="' + esc(c.key) + '"><span class="mv-move">' + moveText(r.ch) + '</span>' +
+        '<span class="mv-who">' + avatarHtml(c, 28) + '<span>@' + esc(c.handle) + '<small>#' + r.base + ' → #' + c.position + '</small></span></span>' +
+        sparkline({ series: r.pts, weekChange: r.ch }, 70, 20) + '</button>';
     };
-    el.innerHTML = '<div class="movers card-cut"><div class="movers-head"><h3>Movers</h3><span class="muted">' + since + ' · ' + state.history.snapshots.length + ' snapshots</span></div>' +
+    var seg = '<div class="seg mv-seg" role="group" aria-label="Period">' + [['week', 'This week'], ['day', '24 hours']].map(function (p) {
+      return '<button type="button" class="seg-btn' + (mvPeriod === p[0] ? ' active' : '') + '" data-mv="' + p[0] + '" aria-pressed="' + (mvPeriod === p[0]) + '">' + p[1] + '</button>';
+    }).join('') + '</div>';
+    el.innerHTML = '<div class="movers card-cut"><div class="movers-head"><h3>Movers</h3><span class="muted">' + since + ' · ' + nSnaps + ' snapshots</span>' + seg + '</div>' +
       (up.length || down.length
         ? '<div class="movers-cols"><div><h4 class="up">Climbing</h4>' + (up.map(item).join('') || '<p class="muted">Nobody yet.</p>') + '</div>' +
           '<div><h4 class="down">Falling</h4>' + (down.map(item).join('') || '<p class="muted">Nobody yet.</p>') + '</div></div>'
@@ -1803,6 +1837,8 @@
     if (t.tagName === 'DIALOG') { t.close(); return; } // click on backdrop
     var wkb = t.closest('[data-wk]');
     if (wkb) { ins.week = +wkb.dataset.wk; ins.weekPicked = true; renderWeek(); refocus('[data-wk="' + ins.week + '"]'); return; }
+    var mvb = t.closest('[data-mv]');
+    if (mvb) { mvPeriod = mvb.dataset.mv; renderMovers(); refocus('[data-mv="' + mvPeriod + '"]'); return; }
     var stb = t.closest('[data-stab]');
     if (stb) { ins.stabTop = stb.dataset.stab === 'top'; renderStab(); refocus('[data-stab="' + stb.dataset.stab + '"]'); return; }
     var ab = t.closest('[data-act]');
@@ -1946,6 +1982,7 @@
     if (!pendingCreator && location.hash.replace(/^#/, '') !== tab) history.replaceState(null, '', '#' + tab);
     showTab(tab);
   })();
+  if (state.cfg.apiUrl) fromCache();
   loadOfficial();
   if (state.cfg.apiUrl) { loadStats(); loadHistory(); } else { state.statsError = 'no server URL'; state.historyError = 'no server URL'; }
 })();

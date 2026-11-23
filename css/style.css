@@ -608,6 +608,7 @@ html { scroll-behavior: smooth; }
 .movers-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 10px; }
 .movers-head h3 { margin: 0; font: 400 24px/1 var(--f-head); text-transform: uppercase; }
 .movers-head .muted { font-size: 14px; }
+.movers-head .mv-seg { margin-left: auto; align-self: center; }
 .movers-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 24px; }
 .movers-cols h4 { margin: 0 0 6px; font: 700 13px/1 var(--f-cond); letter-spacing: 0.14em; text-transform: uppercase; }
 .movers-cols h4.up { color: #5CF08A; } .movers-cols h4.down { color: var(--pink); }
