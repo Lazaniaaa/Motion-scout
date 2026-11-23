@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261123e">
+  <link rel="stylesheet" href="css/style.css?v=20261123h">
 </head>
 <body>
   <nav class="topnav" aria-label="Sections">
@@ -35,6 +35,7 @@
         <a href="#build" data-tab="build" class="topnav-cta">Build a deck</a>
         <a href="#leaderboard" data-tab="leaderboard">Leaderboard</a>
         <a href="#insights" data-tab="insights">Insights</a>
+        <a href="#map" data-tab="map">Map</a>
         <a href="#memes" data-tab="memes" class="nav-memes"><span class="nav-shine">Memes</span><i class="nav-dot" aria-hidden="true"></i></a>
         <a href="#about" data-tab="about">About</a>
       </div>
@@ -266,6 +267,16 @@
     </section>
     </div>
 
+    <div class="view" data-views="map">
+    <section id="map-section" class="block">
+      <div class="block-head">
+        <h2 class="h-tag h-tag-cyan">Content map</h2>
+        <p class="muted">Every creator by the kind of content they make (format) and what it’s about (topic). Hover or tap a creator to see their mix, click to open their page.</p>
+      </div>
+      <div id="cmap"><div class="empty">Loading the official leaderboard…</div></div>
+    </section>
+    </div>
+
     <div class="view" data-views="memes">
     <section id="memes-section" class="block">
       <div class="block-head">
@@ -374,12 +385,13 @@
   <dialog id="maker-dlg" class="modal modal-maker" aria-labelledby="maker-title"></dialog>
   <button type="button" class="fb-float" data-feedback aria-label="Report a problem or suggest an idea">Feedback</button>
 
-  <script src="js/public-config.js?v=20261123e"></script>
-  <script src="js/lineup.js?v=20261123e"></script>
-  <script src="js/api.js?v=20261123e"></script>
-  <script src="js/creators-data.js?v=20261123e"></script>
+  <script src="js/public-config.js?v=20261123h"></script>
+  <script src="js/lineup.js?v=20261123h"></script>
+  <script src="js/api.js?v=20261123h"></script>
+  <script src="js/creators-data.js?v=20261123h"></script>
+  <script src="js/content-map.js?v=20261123h"></script>
 
-  <script src="js/app.js?v=20261123e"></script>
-  <script src="js/meme-maker.js?v=20261123e"></script>
+  <script src="js/app.js?v=20261123h"></script>
+  <script src="js/meme-maker.js?v=20261123h"></script>
 </body>
 </html>

@@ -246,6 +246,7 @@
     ['lineup-section', 'ranking-section'].forEach(function (id) { $(id).hidden = !has && !!state.officialError; });
     if (has) { renderLineup(); renderMyLineup(); renderMovers(); renderRanking(); }
     if (document.body.getAttribute('data-tab') === 'insights') renderInsights();
+    if (document.body.getAttribute('data-tab') === 'map') renderMap();
     if (has && detailKey && $('detail').open) { // stats or history arrived
       var st = $('detail').scrollTop, hadFocus = $('detail').contains(document.activeElement);
       openDetail(detailKey, true); $('detail').scrollTop = st;
@@ -644,7 +645,7 @@
       return '<button type="button" class="rank-row t' + tierOf(c) + (c.position <= 3 ? ' top3' : '') + '" data-key="' + esc(c.key) + '">' +
         '<span class="r-rank">' + (c.position < 10 ? '0' : '') + c.position + '</span>' +
         '<span class="r-who">' + avatarHtml(c, 38) + '<span class="r-whotext"><span class="r-handle">@' + esc(c.handle) + '</span><span class="r-name">' + esc(c.name) + '</span>' +
-          '<span class="chips">' + chipsFor(c) + '</span></span></span>' +
+          '<span class="chips">' + fmtChip(c) + chipsFor(c) + '</span></span></span>' +
         '<span class="r-score">' + deltaHtml(c.delta) + '<small>change</small>' + sparkline(c, 64, 18) + '</span>' +
         '<span class="r-subs">' + (hasStats ? subs : '<span class="muted r-nostats">' + noStats + '</span>') + '</span>' +
         '<span class="r-stars"><span class="pred" title="' + (c.stars != null ? 'Stars from the game' : 'Estimated from rank') + '">' + starsText(c) + '</span><br><small>' + (c.starsFrom === 'yours' ? 'your card' : c.stars != null ? 'real' : 'from rank') + '</small></span>' +
@@ -683,7 +684,7 @@
       '<div class="dh-who"><h2 id="detail-title">' + esc(c.name) + '</h2>' +
         (c.hasX ? '<a class="dh-handle" href="https://x.com/' + encodeURIComponent(c.handle) + '" target="_blank" rel="noopener">@' + esc(c.handle) + '</a>' : '<span class="dh-handle muted">No X account tracked</span>') +
         '<button type="button" class="link-btn dh-copy" data-copy-link="' + esc(pageId(c)) + '">Copy link to this page</button>' +
-        '<div class="chips">' + chipsFor(c) + (c.starsFrom === 'yours' ? '<span class="chip">your card</span>' : '') + '</div></div>' +
+        '<div class="chips">' + chipsFor(c) + (c.starsFrom === 'yours' ? '<span class="chip">your card</span>' : '') + '</div>' + headMix(c) + '</div>' +
       '<div class="dh-rank"><b>#' + c.position + '</b><small>of ' + b.N + '</small></div>' +
       '<button type="button" class="modal-x" data-close aria-label="Close">✕</button></div>';
     var tiles = '<div class="dtiles">' +
@@ -694,7 +695,7 @@
       tile('Deck value', fInt(c.points), '× your card’s boost') +
       swingTile(c) +
     '</div>';
-    var body = '<section class="dsec"><h3>Rank history</h3>' + rankChart(c) + '</section>';
+    var body = contentHtml(c) + '<section class="dsec"><h3>Rank history</h3>' + rankChart(c) + '</section>';
     if (x) {
       var eng = x.views > 0 ? (x.interactions / x.views * 100) : null;
       body += '<section class="dsec"><h3>X · last ' + x.days + ' days <span class="muted">' + esc(x.dateFrom || '') + ' → ' + esc(x.dateTo || '') + '</span></h3><div class="dtiles">' +
@@ -779,6 +780,91 @@
     var label = pct < 1 / 3 ? 'Steady' : pct > 2 / 3 ? 'Swingy' : 'Average swing';
     var vs = !others ? '' : higher >= lower ? ', steadier than ' + Math.round(higher / others * 100) + '% of creators' : ', swingier than ' + Math.round(lower / others * 100) + '% of creators';
     return tile('Rank range · 7 days', me.best === me.worst ? '#' + me.best : '#' + me.best + '–' + me.worst, label + ' (±' + me.sd.toFixed(1) + ' places' + vs + ')');
+  }
+
+  /* ---------- content map: what kind of content each creator makes (hand-tagged, js/content-map.js) ---------- */
+  var CM = MS.CONTENT || { formats: [], topics: [], by: {} };
+  var FORMAT_COLOR = { 'Streams': '#A77BFF', 'Videos': '#FF3977', 'Podcasts & shows': '#FFC94D', 'Threads & essays': '#7AFDFD', 'Takes': '#93A6C4', 'Memes': '#5CF08A', 'News': '#FF8A3D' };
+  var TOPIC_COLOR = { 'Gaming & streaming': '#A77BFF', 'Sports': '#FF8A3D', 'Culture & comedy': '#FF6BD6', 'Tech & AI': '#7AFDFD', 'Crypto & markets': '#FFC94D', 'Business': '#4DA3FF', 'Politics': '#FF3977', 'Health & science': '#5CF08A' };
+  var cmFilter = null; // { kind: 'f' | 't', name } highlights one format or topic
+  function contentOf(c) { return CM.by[c.key] || null; }
+  function mixText(m) { return m.map(function (x) { return x[0] + (m.length > 1 ? ' ' + x[1] + '%' : ''); }).join(' · '); }
+  function mixBar(m, colors) {
+    return '<span class="cm-bar">' + m.map(function (x) {
+      return '<i style="width:' + x[1] + '%;background:' + colors[x[0]] + '" title="' + esc(x[0] + ' ' + x[1] + '%') + '"></i>';
+    }).join('') + '</span><span class="cm-legend">' + m.map(function (x) {
+      return '<span><b style="background:' + colors[x[0]] + '"></b>' + esc(x[0]) + (m.length > 1 ? ' <em>' + x[1] + '%</em>' : '') + '</span>';
+    }).join('') + '</span>';
+  }
+  // compact mix under the name in a creator's page: format bar + main format and topic
+  function headMix(c) {
+    var m = contentOf(c);
+    if (!m) return '';
+    return '<a class="dh-mix" href="#map" title="' + esc(mixText(m.f) + ' / ' + mixText(m.t)) + '"><span class="cm-bar">' + m.f.map(function (x) {
+      return '<i style="width:' + x[1] + '%;background:' + FORMAT_COLOR[x[0]] + '"></i>';
+    }).join('') + '</span><span class="dh-mix-t">' + m.f.map(function (x) { return esc(x[0]) + (m.f.length > 1 ? ' ' + x[1] + '%' : ''); }).join(' · ') +
+      ' <em>·</em> ' + esc(m.t[0][0]) + (m.t.length > 1 ? ' ' + m.t[0][1] + '%' : '') + '</span></a>';
+  }
+  function fmtChip(c) {
+    var m = contentOf(c);
+    return m ? '<span class="chip chip-cm" style="--c:' + FORMAT_COLOR[m.f[0][0]] + '" title="' + esc(mixText(m.f) + ' / ' + mixText(m.t)) + '">' + esc(m.f[0][0]) + '</span>' : '';
+  }
+  function contentHtml(c) {
+    var m = contentOf(c);
+    if (!m) return '';
+    return '<section class="dsec"><h3>Content <span class="muted">estimated by hand</span></h3><div class="cm-mix">' +
+      '<div><small>Format</small>' + mixBar(m.f, FORMAT_COLOR) + '</div><div><small>Topic</small>' + mixBar(m.t, TOPIC_COLOR) + '</div></div>' +
+      '<p class="muted ch-note">What they mostly post, roughly. <a href="#map">See every creator on the content map →</a></p></section>';
+  }
+  function renderMap() {
+    var el = $('cmap');
+    if (!el) return;
+    if (!state.board) { el.innerHTML = '<div class="empty">' + (state.officialError ? 'Couldn’t load Motion’s official leaderboard.' : 'Loading the official leaderboard…') + '</div>'; return; }
+    var list = state.board.list.filter(contentOf);
+    var cell = {};
+    list.forEach(function (c) { var m = contentOf(c), k = m.f[0][0] + '|' + m.t[0][0]; (cell[k] = cell[k] || []).push(c); });
+    var who = function (c) {
+      var m = contentOf(c), on = !cmFilter || (cmFilter.kind === 'f' ? m.f : m.t).some(function (x) { return x[0] === cmFilter.name; });
+      return '<button type="button" class="cm-who' + (on ? '' : ' dim') + '" data-key="' + esc(c.key) + '" title="' + esc(c.name + ' · #' + c.position + '\n' + mixText(m.f) + '\n' + mixText(m.t)) + '"' +
+        ' aria-label="' + esc(c.name + ', rank ' + c.position + ', ' + mixText(m.f) + ', ' + mixText(m.t)) + '">' + avatarHtml(c, 36) + '<i class="cm-rk">' + c.position + '</i>' +
+        (m.f.length > 1 ? '<i class="cm-mixdot" style="background:' + FORMAT_COLOR[m.f[1][0]] + '"></i>' : '') + '</button>';
+    };
+    var avg = function (a, f) { return a.length ? a.reduce(function (s2, c) { return s2 + f(c); }, 0) / a.length : null; };
+    var ppd = function (c) { return c.x && c.x.days ? c.x.posts / c.x.days : 0; };
+    var usedTopics = CM.topics.filter(function (t) { return list.some(function (c) { return contentOf(c).t[0][0] === t; }); });
+    var head = '<div class="cm-row cm-headrow"><div class="cm-fmt"></div>' + usedTopics.map(function (t) {
+      var on = cmFilter && cmFilter.kind === 't' && cmFilter.name === t;
+      return '<button type="button" class="cm-th' + (on ? ' active' : '') + '" data-cm-t="' + esc(t) + '" aria-pressed="' + !!on + '"><b style="background:' + TOPIC_COLOR[t] + '"></b>' + esc(t) + '</button>';
+    }).join('') + '</div>';
+    var rows = CM.formats.map(function (f) {
+      var inF = list.filter(function (c) { return contentOf(c).f[0][0] === f; });
+      if (!inF.length) return '';
+      var on = cmFilter && cmFilter.kind === 'f' && cmFilter.name === f;
+      return '<div class="cm-row" style="--fc:' + FORMAT_COLOR[f] + '"><button type="button" class="cm-fmt' + (on ? ' active' : '') + '" data-cm-f="' + esc(f) + '" aria-pressed="' + !!on + '"><b>' + esc(f) + '</b>' +
+        '<small>' + inF.length + ' creator' + (inF.length === 1 ? '' : 's') + ' · avg #' + Math.round(avg(inF, function (c) { return c.position; })) + '</small></button>' +
+        usedTopics.map(function (t) {
+          var cs = (cell[f + '|' + t] || []).sort(function (a, b) { return a.position - b.position; });
+          return '<div class="cm-cell' + (cs.length ? '' : ' empty') + '"><span class="cm-cell-t">' + esc(t) + '</span>' + cs.map(who).join('') + '</div>';
+        }).join('') + '</div>';
+    }).join('');
+    // which formats and topics rank best (by main format/topic)
+    var stat = function (kind, names, colors) {
+      return names.map(function (n) {
+        var g = list.filter(function (c) { return contentOf(c)[kind][0][0] === n; });
+        return g.length ? { n: n, g: g, rank: avg(g, function (c) { return c.position; }), ppd: avg(g, ppd), best: g.slice().sort(function (a, b) { return a.position - b.position; })[0] } : null;
+      }).filter(Boolean).sort(function (a, b) { return a.rank - b.rank; }).map(function (x) {
+        return '<tr><td><span class="cm-key"><b style="background:' + colors[x.n] + '"></b>' + esc(x.n) + '</span></td><td>' + x.g.length + '</td><td>#' + Math.round(x.rank) + '</td><td>' + fAvg(x.ppd) + '</td>' +
+          '<td><button type="button" class="tbl-who" data-key="' + esc(x.best.key) + '">' + avatarHtml(x.best, 22) + '@' + esc(x.best.handle) + ' <small class="muted">#' + x.best.position + '</small></button></td></tr>';
+      }).join('');
+    };
+    var thead = function (label) { return '<thead><tr><th>' + label + '</th><th>Creators</th><th>Avg rank</th><th>Posts a day</th><th>Best ranked</th></tr></thead>'; };
+    el.innerHTML = '<div class="cm card-cut">' +
+      (cmFilter ? '<p class="cm-filter">Highlighting <b>' + esc(cmFilter.name) + '</b>, as main or side content. <button type="button" class="link-btn" data-cm-clear>Show everyone</button></p>' : '') +
+      '<div class="cm-grid" style="--cols:' + usedTopics.length + '">' + head + rows + '</div>' +
+      '<p class="muted ch-note">Rows: main format. Columns: main topic. The number is the official rank; a small dot means they also make another format (hover for the mix). Click a format or topic to highlight everyone who makes it, even on the side. Formats and topics are tagged by hand from what each creator posts, so read them as a rough guide.</p></div>' +
+      '<div class="cm-stats"><div class="ins-card card-cut"><h3>Which formats rank best</h3><div class="tbl-wrap"><table class="tbl cm-tbl">' + thead('Format') + '<tbody>' + stat('f', CM.formats, FORMAT_COLOR) + '</tbody></table></div></div>' +
+      '<div class="ins-card card-cut"><h3>Which topics rank best</h3><div class="tbl-wrap"><table class="tbl cm-tbl">' + thead('Topic') + '<tbody>' + stat('t', CM.topics, TOPIC_COLOR) + '</tbody></table></div></div></div>' +
+      '<p class="muted ch-note">Average official rank right now, by each creator’s main format or topic. Posts a day: original posts and quotes on X over the last 14 days.</p>';
   }
 
   /* ---------- insights: Week in Motion, steady vs swingy, X activity vs rank ---------- */
@@ -1217,7 +1303,7 @@
 
   /* ---------- tabs: one view at a time, chosen by the URL hash ---------- */
   // #play (How to play) · #build (Build a deck) · #leaderboard · #about. Old section links still work.
-  var TABS = ['play', 'build', 'leaderboard', 'insights', 'memes', 'about'];
+  var TABS = ['play', 'build', 'leaderboard', 'insights', 'map', 'memes', 'about'];
   var pendingCreator = null; // #c/<handle>: open that creator's page once the leaderboard loads
   function creatorFromHash() {
     var m = (location.hash || '').match(/^#c\/([^\/]{1,80})$/);
@@ -1249,11 +1335,13 @@
     if (tab === 'build' && state.board) renderLineup();
     if (tab === 'memes') { loadMemes(); lsSet(LS_MEMES_SEEN, '1'); document.body.classList.add('memes-seen'); }
     if (tab === 'insights') { loadMemes(); renderInsights(); }
+    if (tab === 'map') renderMap();
   }
   window.addEventListener('hashchange', function () {
     var ch = creatorFromHash();
     if (ch) { if (!document.body.getAttribute('data-tab')) showTab('leaderboard'); pendingCreator = ch; renderAll(); return; }
     var tab = tabFromHash() || 'play';
+    if ($('detail').open) $('detail').close(); // a link inside a creator's page went to another tab
     if (location.hash.replace(/^#/, '') !== tab) history.replaceState(null, '', '#' + tab); // old section links → tab name
     showTab(tab);
   });
@@ -1747,6 +1835,15 @@
       else done(false);
       return;
     }
+    var cmf = t.closest('[data-cm-f]'), cmt = t.closest('[data-cm-t]');
+    if (cmf || cmt) {
+      var nf = cmf ? { kind: 'f', name: cmf.dataset.cmF } : { kind: 't', name: cmt.dataset.cmT };
+      cmFilter = cmFilter && cmFilter.kind === nf.kind && cmFilter.name === nf.name ? null : nf;
+      renderMap();
+      refocus(cmf ? '[data-cm-f="' + nf.name + '"]' : '[data-cm-t="' + nf.name + '"]');
+      return;
+    }
+    if (t.closest('[data-cm-clear]')) { cmFilter = null; renderMap(); return; }
     var dk = t.closest('[data-deck]');
     if (dk) { if (dk.dataset.deck === '1') deckNext(); else deckBack(); return; }
     var sb = t.closest('[data-sort]');
