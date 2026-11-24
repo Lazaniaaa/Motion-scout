@@ -701,6 +701,17 @@ body:not([data-tab="play"]) main.wrap { padding-top: 26px; }
 .cd-local { margin: 28px 0 14px; color: var(--muted); font-size: 14px; }
 .cd-link { color: var(--cyan); font: 700 14px/1 var(--f-cond); letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; border-bottom: 1px solid currentColor; }
 .cd-link:hover { color: var(--pink); }
+.cd-clip { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 10px; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+.cd-clip[hidden] { display: none; }
+.cd-clip > span { font: 700 13px/1 var(--f-cond); letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+.cd-clip-btn {
+  padding: 8px 16px; cursor: pointer; font: 700 14px/1 var(--f-cond); letter-spacing: 0.1em; text-transform: uppercase;
+  color: #fff; background: var(--pink); border: 0; border-radius: 999px;
+}
+.cd-clip-btn:hover { background: #ff5a8f; }
+.cd-clip-btn:disabled { opacity: 0.45; cursor: default; }
+.cd-clip-status { flex-basis: 100%; margin: 4px 0 0; min-height: 1.2em; font-size: 13px; color: var(--muted); }
+.cd-rec-canvas { position: fixed; left: -10000px; top: 0; pointer-events: none; }
 .cd-dlg.cd-in .cd-date { animation: cdDate 1.2s ease-out both; }
 .cd-dlg.cd-in .cd-unit { animation: cdIn 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--i) * 130ms + 150ms); }
 .cd-unit b.tick { animation: cdTick 0.45s ease-out; }
