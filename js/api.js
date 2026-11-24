@@ -26,6 +26,16 @@
       return j;
     });
   }
+  // Reads (scores, history) come from the cached copy on Vercel (api/data.js) when the page is served from there;
+  // if that fails, or the page runs elsewhere (local server, file), straight from Apps Script.
+  function cachedGet(cfg, mode) {
+    var direct = function () {
+      return fetch(cfg.apiUrl + (cfg.apiUrl.indexOf('?') < 0 ? '?' : '&') + 'mode=' + mode, { cache: 'no-store', redirect: 'follow' }).then(parse);
+    };
+    var host = String(root.location && root.location.hostname || '');
+    if (!cfg.dataUrl || !/\.vercel\.app$/.test(host) && host !== cfg.dataHost) return direct();
+    return fetch(cfg.dataUrl + '?mode=' + mode).then(parse).catch(direct);
+  }
   function post(url, body) {
     // text/plain keeps it a "simple" request: no CORS preflight, which Apps Script can't answer.
     return fetch(url, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' }).then(parse);
@@ -36,13 +46,13 @@
     live: function (cfg) {
       var l = local(); if (l) return l.live(cfg);
       if (!cfg.apiUrl) return Promise.reject(new Error('no server URL'));
-      return fetch(cfg.apiUrl + (cfg.apiUrl.indexOf('?') < 0 ? '?' : '&') + 'mode=scores', { cache: 'no-store', redirect: 'follow' }).then(parse);
+      return cachedGet(cfg, 'scores');
     },
     // Official leaderboard snapshots logged by the server: { names: [...], snapshots: [{ t, p: [...] }] }.
     // Always the real server (there's no local copy of the history).
     history: function (cfg) {
       if (!cfg.apiUrl) return Promise.reject(new Error('no server URL'));
-      return fetch(cfg.apiUrl + (cfg.apiUrl.indexOf('?') < 0 ? '?' : '&') + 'mode=history', { cache: 'no-store', redirect: 'follow' }).then(parse);
+      return cachedGet(cfg, 'history');
     },
     // "Report a problem / Suggest an idea": the server saves it and forwards it to the owner.
     feedback: function (cfg, msg) {

@@ -10,6 +10,11 @@
     // Web App URL of apps-script/Code.gs: returns scores (GET) and scores uploaded data / self-checks (POST).
     apiUrl: 'https://script.google.com/macros/s/AKfycbx8DoQw-yWY3wmGXbXNDd0NSfNaZLTVdoqDrvbF3dJ--ydsfumsfH1MyJ4W6h6pXiki_g/exec',
 
+    // Cached copy of the reads above on Vercel (api/data.js), used when the page is served from Vercel
+    // (*.vercel.app, or dataHost if the site moves to its own domain).
+    dataUrl: '/api/data',
+    dataHost: '',
+
     // Motion's public leaderboard (rank only, no scores). Shown as "Official #N". Empty = off.
     officialUrl: 'https://leaderboard.motion.game/api/leaderboard',
 
