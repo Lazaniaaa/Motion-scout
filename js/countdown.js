@@ -34,6 +34,7 @@
     '<a class="cd-link" href="https://x.com/motiongame_" target="_blank" rel="noopener">Follow @motiongame_ on X</a>' +
     '<div class="cd-clip" hidden><span>Download a video clip</span>' +
     '<button type="button" class="cd-clip-btn" data-clip="5">5 s</button><button type="button" class="cd-clip-btn" data-clip="10">10 s</button>' +
+    '<label class="cd-sound"><input type="checkbox" checked> Sound</label>' +
     '<p class="cd-clip-status" aria-live="polite"></p></div>';
 
   document.body.appendChild(pill);
@@ -79,10 +80,67 @@
 
   /* ---------- video clip: the same countdown drawn on a canvas and recorded in the browser ---------- */
   var REC_TYPES = ['video/mp4;codecs=avc1.42E01F', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
-  function recType() {
+  var REC_TYPES_SOUND = ['video/mp4;codecs=avc1.42E01F,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus'];
+  function recType(sound) {
     if (!window.MediaRecorder || !window.HTMLCanvasElement || !HTMLCanvasElement.prototype.captureStream) return null;
-    for (var i = 0; i < REC_TYPES.length; i++) if (MediaRecorder.isTypeSupported(REC_TYPES[i])) return REC_TYPES[i];
+    if (sound && !(window.AudioContext || window.webkitAudioContext)) return null;
+    var list = sound ? REC_TYPES_SOUND : REC_TYPES;
+    for (var i = 0; i < list.length; i++) if (MediaRecorder.isTypeSupported(list[i])) return list[i];
     return null;
+  }
+
+  /* Soundtrack, synthesized here (no samples): a low drone, a big brass-like "braam" with a sub boom when the
+   * digits land, and a tick on every second the clock changes. `tickIn`: seconds until the first change. */
+  function clipSound(ac, out, sec, tickIn) {
+    var t0 = ac.currentTime + 0.03, end = t0 + sec;
+    var comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.ratio.value = 6;
+    var master = ac.createGain();
+    master.gain.setValueAtTime(1, t0); master.gain.setValueAtTime(1, end - 0.8); master.gain.linearRampToValueAtTime(0.0001, end);
+    master.connect(comp); comp.connect(out);
+    var rev = ac.createConvolver(), len = Math.floor(ac.sampleRate * 2.6), ir = ac.createBuffer(2, len, ac.sampleRate);
+    for (var ch = 0; ch < 2; ch++) { var d = ir.getChannelData(ch); for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+    rev.buffer = ir;
+    var wet = ac.createGain(); wet.gain.value = 0.32; rev.connect(wet); wet.connect(master);
+    function bus(node, dry) { node.connect(master); if (!dry) node.connect(rev); }
+    function osc(type, f, dest, a, b) { var o = ac.createOscillator(); o.type = type; o.frequency.value = f; o.connect(dest); o.start(a); o.stop(b); return o; }
+    function env(peak, a, attack, decayTo) {
+      var g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, a); g.gain.exponentialRampToValueAtTime(peak, a + attack); g.gain.exponentialRampToValueAtTime(0.0001, decayTo);
+      return g;
+    }
+
+    // drone: detuned saws under a low filter, fading in
+    var dl = ac.createBiquadFilter(); dl.type = 'lowpass'; dl.frequency.value = 170;
+    var dg = ac.createGain(); dg.gain.setValueAtTime(0.0001, t0); dg.gain.exponentialRampToValueAtTime(0.09, t0 + 1.6);
+    [55, 55.35, 82.4].forEach(function (f) { osc('sawtooth', f, dl, t0, end); });
+    dl.connect(dg); bus(dg);
+
+    // braam: a stack of low saws, filter opening fast and closing slowly
+    var bt = t0 + 0.15;
+    var bf = ac.createBiquadFilter(); bf.type = 'lowpass'; bf.Q.value = 5;
+    bf.frequency.setValueAtTime(110, bt); bf.frequency.exponentialRampToValueAtTime(1500, bt + 0.32); bf.frequency.exponentialRampToValueAtTime(200, bt + 3);
+    var bg = env(0.075, bt, 0.05, bt + 3.8);
+    [41.2, 41.45, 55, 82.4, 110, 110.7].forEach(function (f) { osc('sawtooth', f, bf, bt, bt + 3.9); });
+    bf.connect(bg); bus(bg);
+    // sub boom with a pitch drop
+    var sg = env(0.85, bt, 0.012, bt + 1.5);
+    var so = osc('sine', 90, sg, bt, bt + 1.6);
+    so.frequency.setValueAtTime(90, bt); so.frequency.exponentialRampToValueAtTime(32, bt + 0.8);
+    bus(sg, true);
+
+    // ticks: a short filtered noise click plus a high blip
+    var nb = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.05), ac.sampleRate), nd = nb.getChannelData(0);
+    for (var k = 0; k < nd.length; k++) nd[k] = Math.random() * 2 - 1;
+    for (var tt = tickIn; tt < sec - 0.1; tt += 1) {
+      var at = t0 + tt;
+      var src = ac.createBufferSource(); src.buffer = nb;
+      var bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 1.4;
+      var ng = env(0.5, at, 0.002, at + 0.05);
+      src.connect(bp); bp.connect(ng); bus(ng); src.start(at); src.stop(at + 0.05);
+      var hg = env(0.09, at, 0.002, at + 0.08);
+      osc('sine', 1250, hg, at, at + 0.09); bus(hg);
+    }
   }
   function ease(x) { x = Math.min(1, Math.max(0, x)); return 1 - Math.pow(1 - x, 3); }
   // Centered text with letter spacing (the spacing also trails the last letter, so shift by half of it).
@@ -147,13 +205,21 @@
   }
 
   var clipBox = dlg.querySelector('.cd-clip'), clipStatus = dlg.querySelector('.cd-clip-status'), clipBusy = false;
-  var REC = recType();
-  if (REC) clipBox.hidden = false;
-  function setBusy(b) { clipBusy = b; [].forEach.call(dlg.querySelectorAll('.cd-clip-btn'), function (x) { x.disabled = b; }); }
+  var soundBox = dlg.querySelector('.cd-sound input');
+  if (recType(false)) clipBox.hidden = false;
+  if (!recType(true)) { soundBox.checked = false; soundBox.parentNode.hidden = true; }
+  function setBusy(b) { clipBusy = b; [].forEach.call(dlg.querySelectorAll('.cd-clip-btn, .cd-sound input'), function (x) { x.disabled = b; }); }
   function recordClip(sec) {
+    var sound = soundBox.checked, REC = recType(sound);
     if (clipBusy || !REC) return;
     setBusy(true);
     clipStatus.textContent = 'Getting ready…';
+    // The audio context starts here, inside the click, so the browser allows it.
+    var ac = null, dest = null;
+    if (sound) {
+      try { ac = new (window.AudioContext || window.webkitAudioContext)(); dest = ac.createMediaStreamDestination(); }
+      catch (e) { ac = null; REC = recType(false); }
+    }
     var W = 1280, H = 720, cv = document.createElement('canvas');
     cv.width = W; cv.height = H; cv.className = 'cd-rec-canvas';
     document.body.appendChild(cv);
@@ -163,13 +229,15 @@
       : Promise.resolve();
     fonts.catch(function () { /* draw with fallback fonts */ }).then(function () {
       var stream = cv.captureStream(30), chunks = [], last = {}, raf, start;
-      var rec = new MediaRecorder(stream, { mimeType: REC, videoBitsPerSecond: 8000000 });
+      if (ac) stream = new MediaStream(stream.getVideoTracks().concat(dest.stream.getAudioTracks()));
+      var rec = new MediaRecorder(stream, { mimeType: REC, videoBitsPerSecond: 8000000, audioBitsPerSecond: 192000 });
       rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
       rec.onerror = function () { finish(null); };
       rec.onstop = function () { finish(new Blob(chunks, { type: REC.split(';')[0] })); };
       function finish(blob) {
         clearInterval(raf);
         stream.getTracks().forEach(function (tr) { tr.stop(); });
+        if (ac) ac.close().catch(function () { /* already closed */ });
         cv.remove();
         setBusy(false);
         if (!blob || !blob.size) { clipStatus.textContent = 'Couldn’t record the clip. Please try again.'; return; }
@@ -188,6 +256,7 @@
       }
       start = performance.now();
       drawFrame(ctx, W, H, 0, last);
+      if (ac) { if (ac.resume) ac.resume(); clipSound(ac, dest, sec, ((TARGET - Date.now()) % 1000) / 1000); }
       rec.start(250);
       raf = setInterval(frame, 1000 / 30);
     });

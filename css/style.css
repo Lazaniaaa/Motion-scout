@@ -710,6 +710,9 @@ body:not([data-tab="play"]) main.wrap { padding-top: 26px; }
 }
 .cd-clip-btn:hover { background: #ff5a8f; }
 .cd-clip-btn:disabled { opacity: 0.45; cursor: default; }
+.cd-sound { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font: 700 13px/1 var(--f-cond); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.cd-sound[hidden] { display: none; }
+.cd-sound input { accent-color: var(--pink); width: 16px; height: 16px; margin: 0; }
 .cd-clip-status { flex-basis: 100%; margin: 4px 0 0; min-height: 1.2em; font-size: 13px; color: var(--muted); }
 .cd-rec-canvas { position: fixed; left: -10000px; top: 0; pointer-events: none; }
 .cd-dlg.cd-in .cd-date { animation: cdDate 1.2s ease-out both; }
